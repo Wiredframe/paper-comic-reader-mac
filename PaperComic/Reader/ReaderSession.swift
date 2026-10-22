@@ -103,9 +103,10 @@ final class ReaderSession {
 			guard !isClosed else { return }
 		}
 		phase = .loading
+		let paperEnabled = model.paper.isEnabled, paperParams = model.paper.params
 		let opened = await PageImageStore.open(bookID: book.id, url: book.archiveURL,
-											   paperEnabled: model.paper.isEnabled,
-											   paperParams: model.paper.params)
+											   paperEnabled: paperEnabled,
+											   paperParams: paperParams)
 		guard !isClosed else { return }
 		guard opened.pageCount > 0 else {
 			phase = .failed(String(localized: "This comic can’t be opened. The file may be damaged."))
@@ -113,6 +114,10 @@ final class ReaderSession {
 		}
 		store = opened
 		model.register(self)
+		// The paper setting may have changed while the archive opened.
+		if model.paper.isEnabled != paperEnabled || model.paper.params != paperParams {
+			opened.setPaper(enabled: model.paper.isEnabled, params: model.paper.params)
+		}
 		// The file may not be page for page what the library recorded (replaced, re-scanned).
 		if book.pageCount != opened.pageCount { book.pageCount = opened.pageCount }
 		anchorPage = min(max(initialPage ?? book.lastReadPage, 0), opened.pageCount - 1)

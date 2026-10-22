@@ -147,7 +147,9 @@ final class PageCanvasView: NSView {
 			pageViews.forEach { $0.setLiveText(new.liveText) }
 		}
 		// Back from the page grid or a toolbar click, the keys belong to the pages again.
-		if let window, !(window.firstResponder is NSText), window.firstResponder !== self {
+		// Never from something inside the canvas, such as a Live Text selection waiting for ⌘C.
+		if let window, let responder = window.firstResponder, responder !== self, !(responder is NSText),
+		   !((responder as? NSView)?.isDescendant(of: self) ?? false) {
 			window.makeFirstResponder(self)
 		}
 	}
@@ -261,7 +263,9 @@ final class PageCanvasView: NSView {
 	private func fitWindowToSpread(unitWidth: CGFloat) {
 		guard let state, state.fitWindow, state.fit == .page, unitWidth > 0,
 			  let window = hostWindow, let screen = window.screen ?? NSScreen.main,
-			  !window.styleMask.contains(.fullScreen), window.inLiveResize == false else { return }
+			  !window.styleMask.contains(.fullScreen), window.inLiveResize == false,
+			  // Tabs share one frame: fitting it to a comic would squeeze the library tabs too.
+			  (window.tabbedWindows?.count ?? 1) <= 1 else { return }
 		let visible = screen.visibleFrame
 		let chromeHeight = window.frame.height - window.contentLayoutRect.height
 		let chromeWidth = window.frame.width - window.contentLayoutRect.width

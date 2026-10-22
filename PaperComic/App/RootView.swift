@@ -27,15 +27,21 @@ struct RootView: View {
 			}
 		}
 		.frame(minWidth: 640, minHeight: 480)
-		.background(WindowConfigurator { window = $0 })
-		.onChange(of: model.pendingOpen) { _, pending in
-			guard model.frontWindowMayTakePending, !pending.isEmpty, session == nil,
-				  let window, window == (NSApp.keyWindow ?? NSApp.mainWindow) else { return }
-			takePending()
-		}
+		.background(WindowConfigurator { window in
+			self.window = window
+			model.windowTakers[ObjectIdentifier(window)] = {
+				// Only a window showing the library takes them; a reader is left as it is.
+				guard session == nil, !model.pendingOpen.isEmpty else { return false }
+				takePending()
+				return true
+			}
+		})
 		.onAppear(perform: start)
 		// The reader writes its progress when it leaves: back to the library, or the window closing.
-		.onDisappear { session?.close() }
+		.onDisappear {
+			session?.close()
+			if let window { model.windowTakers[ObjectIdentifier(window)] = nil }
+		}
 		.onChange(of: model.removedBookIDs) { _, removed in
 			if let session, removed.contains(session.book.id) { leaveReader() }
 		}

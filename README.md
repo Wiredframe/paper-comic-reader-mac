@@ -49,7 +49,7 @@ the folder on the other device.
 
 - One page or two side by side, the cover alone as a printed comic opens, wide pages on their own
 - Left to right or right to left (manga)
-- Fit the page or the width, zoom with a pinch or ⌘+ and ⌘−, drag a zoomed page around
+- Fit the page or the width, zoom with a pinch or ⌘ with plus and minus, drag a zoomed page around
 - Turn pages with the arrow keys, the space bar, a two-finger swipe or a click on the page's edge
 - **Live Text**: text on a page can be selected, copied, looked up and translated
 - Quick Look shows a comic's cover in the Finder
@@ -61,7 +61,8 @@ Formats: CBZ (and plain ZIP archives of images), like the iOS app.
 Up to 2.0 this was a fork of [Simple Comic](https://github.com/MaddTheSane/Simple-Comic) with a
 paper effect and a library. 3.0 is a new app built on the core of the iOS app. It keeps Simple
 Comic's bundle id, so its library (folder, covers, downloads, reading positions, favorites) and the
-paper settings are taken over on first launch. The old files are copied, never moved.
+paper settings are taken over on first launch. The old files are copied, never moved. Comics in
+formats other than CBZ (CBR, CB7, CBT) are not taken over, since this app reads CBZ only.
 
 ## Install
 

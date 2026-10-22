@@ -48,7 +48,7 @@ private struct LibrarySettings: View {
 					.foregroundStyle(.secondary)
 			}
 			Section("Downloads") {
-				LabeledContent("On this Mac", value: storage)
+				LabeledContent("Comics stored on this Mac", value: storage)
 				Button("Remove All Downloads…") { confirmsRemoval = true }
 					.confirmationDialog("Remove all downloaded comics from this Mac?", isPresented: $confirmsRemoval) {
 						Button("Remove Downloads", role: .destructive) {

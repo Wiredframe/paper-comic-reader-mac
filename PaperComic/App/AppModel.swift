@@ -51,9 +51,10 @@ final class AppModel {
 	/// Opens a new window (a tab, with tabbing preferred), which then takes the next comic from
 	/// `pendingOpen`. Set by the first window, because only a view can reach SwiftUI's openWindow.
 	var openWindow: (() -> Void)?
-	/// Set while comics opened from the Finder wait: the frontmost window takes them if it shows
-	/// the library, rather than leaving an empty library tab behind.
-	var frontWindowMayTakePending = false
+	/// Each window registers how to take waiting comics itself, answering false while it shows a
+	/// comic. Comics opened from the Finder go to the front window this way when it shows the
+	/// library, rather than into a new tab beside an empty library.
+	var windowTakers: [ObjectIdentifier: () -> Bool] = [:]
 	/// The readers open in any window, so their progress can be written when the app quits.
 	private var sessions: [ObjectIdentifier: ReaderSession] = [:]
 	/// Comics removed from the library; a window still reading one goes back to the library.
@@ -256,17 +257,23 @@ final class AppModel {
 		let candidates = urls.filter { ComicFileTypes.isComic($0) }
 		let backups = candidates.filter { LibraryBackupArchive.looksLikeBackup($0) }
 		let comics = candidates.filter { !backups.contains($0) }
-		if let backup = backups.first { restoreLibrary(from: backup) }
+		if let backup = backups.first {
+			if job == nil {
+				restoreLibrary(from: backup)
+			} else {
+				show(String(localized: "The backup wasn’t imported"),
+					 String(localized: "Another library task is running. Open the backup again once it has finished."))
+			}
+		}
 		guard !comics.isEmpty else { return }
 		Task {
 			let books = await importFiles(comics)
 			pendingOpen.append(contentsOf: books.map(\.id))
-			frontWindowMayTakePending = true
-			// Give the front window a turn to take them; whatever is left gets a window.
-			DispatchQueue.main.async {
-				self.frontWindowMayTakePending = false
-				if !self.pendingOpen.isEmpty { self.openWindow?() }
+			if let front = NSApp.keyWindow ?? NSApp.mainWindow,
+			   let take = windowTakers[ObjectIdentifier(front)], take() {
+				return
 			}
+			openWindow?()
 		}
 	}
 

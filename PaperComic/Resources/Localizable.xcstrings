@@ -52,15 +52,57 @@
     "%lld comics": {
       "localizations": {
         "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld Comics"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld Comic"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld Comics"
+                }
+              }
+            }
+          }
+        },
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld comic"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld comics"
+                }
+              }
+            }
           }
         },
         "it": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld fumetti"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld fumetto"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld fumetti"
+                }
+              }
+            }
           }
         }
       }
@@ -68,15 +110,57 @@
     "%lld comics came back without their files and can’t be opened until you import them again.": {
       "localizations": {
         "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld Comics kamen ohne ihre Dateien zurück und lassen sich erst öffnen, wenn du sie erneut importierst."
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld Comic kam ohne seine Datei zurück und lässt sich erst öffnen, wenn du ihn erneut importierst."
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld Comics kamen ohne ihre Dateien zurück und lassen sich erst öffnen, wenn du sie erneut importierst."
+                }
+              }
+            }
+          }
+        },
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld comic came back without its file and can’t be opened until you import it again."
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld comics came back without their files and can’t be opened until you import them again."
+                }
+              }
+            }
           }
         },
         "it": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld fumetti sono tornati senza i loro file e non si possono aprire finché non li importi di nuovo."
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld fumetto è tornato senza il suo file e non si può aprire finché non lo importi di nuovo."
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld fumetti sono tornati senza i loro file e non si possono aprire finché non li importi di nuovo."
+                }
+              }
+            }
           }
         }
       }
@@ -84,15 +168,57 @@
     "%lld files in the library folder couldn’t be read.": {
       "localizations": {
         "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld Dateien im Bibliotheksordner konnten nicht gelesen werden."
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld Datei im Bibliotheksordner konnte nicht gelesen werden."
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld Dateien im Bibliotheksordner konnten nicht gelesen werden."
+                }
+              }
+            }
+          }
+        },
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld file in the library folder couldn’t be read."
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld files in the library folder couldn’t be read."
+                }
+              }
+            }
           }
         },
         "it": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Non è stato possibile leggere %lld file nella cartella della libreria."
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Non è stato possibile leggere %lld file nella cartella della libreria."
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Non è stato possibile leggere %lld file nella cartella della libreria."
+                }
+              }
+            }
           }
         }
       }
@@ -133,6 +259,24 @@
             }
           }
         },
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld page"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld pages"
+                }
+              }
+            }
+          }
+        },
         "it": {
           "variations": {
             "plural": {
@@ -168,6 +312,24 @@
                 "stringUnit": {
                   "state": "translated",
                   "value": "%lld Geschichten"
+                }
+              }
+            }
+          }
+        },
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld story"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld stories"
                 }
               }
             }
@@ -301,6 +463,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tutti i fumetti"
+          }
+        }
+      }
+    },
+    "Another library task is running. Open the backup again once it has finished.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gerade läuft noch eine andere Aufgabe in der Bibliothek. Öffne das Backup erneut, wenn sie fertig ist."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "È in corso un’altra operazione sulla libreria. Riapri il backup quando è terminata."
           }
         }
       }
@@ -669,6 +847,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Fumetti"
+          }
+        }
+      }
+    },
+    "Comics stored on this Mac": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Comics auf diesem Mac"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fumetti su questo Mac"
           }
         }
       }
@@ -1633,22 +1827,6 @@
         }
       }
     },
-    "On this Mac": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Auf diesem Mac"
-          }
-        },
-        "it": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Su questo Mac"
-          }
-        }
-      }
-    },
     "Open": {
       "localizations": {
         "de": {
@@ -1703,6 +1881,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "%lld-mal geöffnet"
+          }
+        },
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Opened %lld time"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Opened %lld times"
+                }
+              }
+            }
           }
         },
         "it": {
@@ -2593,6 +2789,22 @@
         }
       }
     },
+    "The backup wasn’t imported": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Das Backup wurde nicht importiert"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Il backup non è stato importato"
+          }
+        }
+      }
+    },
     "The comic file in the library folder is not deleted.": {
       "localizations": {
         "de": {
@@ -3093,6 +3305,24 @@
             }
           }
         },
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "added %lld comic"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "added %lld comics"
+                }
+              }
+            }
+          }
+        },
         "it": {
           "variations": {
             "plural": {
@@ -3133,6 +3363,24 @@
             }
           }
         },
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "restored %lld bookmark"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "restored %lld bookmarks"
+                }
+              }
+            }
+          }
+        },
         "it": {
           "variations": {
             "plural": {
@@ -3168,6 +3416,24 @@
                 "stringUnit": {
                   "state": "translated",
                   "value": "%lld Comics aktualisiert"
+                }
+              }
+            }
+          }
+        },
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "updated %lld comic"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "updated %lld comics"
                 }
               }
             }

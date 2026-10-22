@@ -72,6 +72,7 @@ final class LegacyMigrationTests: XCTestCase {
 												 defaults: TestStorage.defaults)
 
 		XCTAssertEqual(result, LegacyMigration.Result(imported: 2, skippedOtherFolders: 1, copiedArchives: 1))
+		XCTAssertEqual(result.skippedFormats, 0)
 		let books = try context.fetch(FetchDescriptor<ComicBook>())
 		let migrated = try XCTUnwrap(books.first { $0.id == read })
 		XCTAssertEqual(migrated.lastReadPage, 41)

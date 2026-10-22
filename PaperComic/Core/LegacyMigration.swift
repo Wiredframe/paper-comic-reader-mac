@@ -37,6 +37,8 @@ enum LegacyMigration {
 		var imported = 0
 		var skippedOtherFolders = 0
 		var copiedArchives = 0
+		var skippedFormats = 0
+		var lostOwnedCopies = 0
 	}
 
 	/// Runs once per installation. Returns nil when there was nothing to do.
@@ -55,8 +57,8 @@ enum LegacyMigration {
 			let data = try Data(contentsOf: index)
 			let result = try migrate(data, root: root, into: context, defaults: defaults)
 			defaults.set(true, forKey: doneKey)
-			NSLog("Paper Comic: migrated %d comics from Simple Comic (%d in other folders left behind, %d downloads copied)",
-				  result.imported, result.skippedOtherFolders, result.copiedArchives)
+			NSLog("Paper Comic: migrated %d comics from Simple Comic (%d in other folders and %d in other formats left behind, %d imported copies missing, %d downloads copied)",
+				  result.imported, result.skippedOtherFolders, result.skippedFormats, result.lostOwnedCopies, result.copiedArchives)
 			return result
 		} catch {
 			// Not marked done: the next launch tries again. The old files are untouched either way.
@@ -151,6 +153,12 @@ enum LegacyMigration {
 			}
 			let isFolderBacked = entry.sourceFolderID != nil && entry.sourceRelativePath != nil
 			let ext = (entry.fileName as NSString).pathExtension.lowercased()
+			// Simple Comic also read CBR, CB7 and CBT. This app reads CBZ only, like the iOS one:
+			// such an entry would be a comic that never opens, so it stays behind in the old index.
+			guard ["cbz", "zip"].contains(ext) else {
+				result.skippedFormats += 1
+				continue
+			}
 			let fileName = "\(entry.id.uuidString).\(ext.isEmpty ? "cbz" : ext)"
 
 			var coverName: String?
@@ -174,7 +182,10 @@ enum LegacyMigration {
 				}
 			}
 			// An owned copy whose bytes are gone has nothing to open; leave it behind.
-			if !isFolderBacked && !hasArchive { continue }
+			if !isFolderBacked && !hasArchive {
+				result.lostOwnedCopies += 1
+				continue
+			}
 
 			let book = ComicBook(id: entry.id, title: entry.title, fileName: fileName,
 								 pageCount: entry.pageCount ?? 0, coverName: coverName,
