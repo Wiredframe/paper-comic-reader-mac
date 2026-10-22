@@ -79,6 +79,10 @@ enum ImageDownsampler {
             return false
         }
         _ = try? FileManager.default.removeItem(at: url)
-        return (try? FileManager.default.moveItem(at: temp, to: url)) != nil
+        guard (try? FileManager.default.moveItem(at: temp, to: url)) != nil else {
+            try? FileManager.default.removeItem(at: temp)
+            return false
+        }
+        return true
     }
 }

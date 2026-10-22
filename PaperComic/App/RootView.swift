@@ -11,26 +11,41 @@ import SwiftUI
 import SwiftData
 
 struct RootView: View {
-	/// The comic this window was opened for, nil for a library window.
-	let requested: UUID?
-
 	@Environment(AppModel.self) private var model
 	@Environment(\.openWindow) private var openWindow
 	@State private var session: ReaderSession?
 	@State private var didStart = false
+	@State private var window: NSWindow?
 
 	var body: some View {
 		Group {
 			if let session {
 				ReaderView(session: session, onLeave: leaveReader)
-					.id(session.id)
+					.id(ObjectIdentifier(session))
 			} else {
 				LibraryView(onOpen: open)
 			}
 		}
 		.frame(minWidth: 640, minHeight: 480)
-		.background(WindowConfigurator())
+		.background(WindowConfigurator { window = $0 })
+		.onChange(of: model.pendingOpen) { _, pending in
+			guard model.frontWindowMayTakePending, !pending.isEmpty, session == nil,
+				  let window, window == (NSApp.keyWindow ?? NSApp.mainWindow) else { return }
+			takePending()
+		}
 		.onAppear(perform: start)
+		// The reader writes its progress when it leaves: back to the library, or the window closing.
+		.onDisappear { session?.close() }
+		.onChange(of: model.removedBookIDs) { _, removed in
+			if let session, removed.contains(session.book.id) { leaveReader() }
+		}
+		.onChange(of: model.downloads.failure?.id) { _, id in
+			// A download started from the library failed; a reader explains its own.
+			guard session == nil, let id, let failure = model.downloads.failure, failure.id == id else { return }
+			model.downloads.clearFailure(for: id)
+			model.show(String(localized: "“\(failure.book.displayTitle)” couldn’t be downloaded"),
+					   ReaderSession.describe(failure.error))
+		}
 		.alert(model.message?.title ?? "",
 			   isPresented: Binding(get: { model.message != nil }, set: { if !$0 { model.message = nil } }),
 			   presenting: model.message) { _ in
@@ -38,29 +53,44 @@ struct RootView: View {
 		} message: { message in
 			Text(message.text)
 		}
-		.focusedSceneValue(\.windowActions, WindowActions(openInNewTab: { openWindow(id: "main", value: $0) },
+		.confirmationDialog("Your library couldn’t be opened",
+							isPresented: Binding(get: { model.offersRecovery }, set: { _ in }),
+							titleVisibility: .visible) {
+			Button("Restore from Safety Copy") { model.recover(restore: true) }
+			Button("Start with an Empty Library", role: .destructive) { model.recover(restore: false) }
+		} message: {
+			Text("The library file was damaged and has been set aside, not deleted. Paper Comic keeps a safety copy of your reading progress, favorites and bookmarks, and can rebuild the library from it.")
+		}
+		.focusedSceneValue(\.windowActions, WindowActions(newTab: { openWindow(id: "main") },
 														  leaveReader: session == nil ? nil : leaveReader))
 	}
 
+	/// The first window hands SwiftUI's openWindow to the model, and every new window takes the
+	/// next comic waiting to be opened.
 	private func start() {
 		guard !didStart else { return }
 		didStart = true
 		if model.openWindow == nil {
-			model.openWindow = { id in openWindow(id: "main", value: id) }
+			model.openWindow = { openWindow(id: "main") }
 		}
-		var queue = model.pendingOpen
-		model.pendingOpen = []
-		if let requested { queue.insert(requested, at: 0) }
 		#if DEBUG
 		// Development only: `-debugOpenComic <uuid>` opens a comic at launch, so the reader can
 		// be checked from a script without clicking.
-		if let id = UserDefaults.standard.string(forKey: "debugOpenComic").flatMap(UUID.init) {
-			queue.insert(id, at: 0)
+		if let id = UserDefaults.standard.string(forKey: "debugOpenComic").flatMap(UUID.init),
+		   let book = model.book(id: id) {
+			open(book, nil)
+			return
 		}
 		#endif
-		guard let first = queue.first else { return }
-		if let book = model.book(id: first) { open(book, nil) }
-		queue.dropFirst().forEach { openWindow(id: "main", value: $0) }
+		takePending()
+	}
+
+	private func takePending() {
+		guard !model.pendingOpen.isEmpty else { return }
+		let id = model.pendingOpen.removeFirst()
+		if let book = model.book(id: id) { open(book, nil) }
+		// One window per comic: the rest open in tabs of their own.
+		if !model.pendingOpen.isEmpty { openWindow(id: "main") }
 	}
 
 	private func open(_ book: ComicBook, _ page: Int?) {
@@ -76,7 +106,7 @@ struct RootView: View {
 
 /// What the menu commands can do to the frontmost window.
 struct WindowActions {
-	var openInNewTab: (UUID?) -> Void
+	var newTab: () -> Void
 	var leaveReader: (() -> Void)?
 }
 
@@ -91,14 +121,18 @@ extension FocusedValues {
 	}
 }
 
-/// Lets new windows join the current one as tabs, as Finder and Safari windows do.
+/// Lets new windows join the current one as tabs, as Finder and Safari windows do, and hands
+/// the window to the view that hosts it.
 private struct WindowConfigurator: NSViewRepresentable {
+	let onWindow: (NSWindow) -> Void
+
 	func makeNSView(context: Context) -> NSView {
 		let view = NSView()
 		DispatchQueue.main.async {
 			guard let window = view.window else { return }
 			window.tabbingMode = .preferred
 			window.tabbingIdentifier = "PaperComicReader"
+			onWindow(window)
 		}
 		return view
 	}

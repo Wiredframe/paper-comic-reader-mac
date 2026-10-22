@@ -29,6 +29,7 @@ private struct LibrarySettings: View {
 	@Environment(AppModel.self) private var model
 	@Query private var books: [ComicBook]
 	@State private var storage = ""
+	@State private var confirmsRemoval = false
 
 	var body: some View {
 		Form {
@@ -48,12 +49,26 @@ private struct LibrarySettings: View {
 			}
 			Section("Downloads") {
 				LabeledContent("On this Mac", value: storage)
-				Button("Remove All Downloads") {
-					for book in books where book.isFolderBacked && !book.isRemote {
-						model.evict(book)
+				Button("Remove All Downloads…") { confirmsRemoval = true }
+					.confirmationDialog("Remove all downloaded comics from this Mac?", isPresented: $confirmsRemoval) {
+						Button("Remove Downloads", role: .destructive) {
+							for book in books where book.isFolderBacked && !book.isRemote {
+								model.evict(book)
+							}
+							refreshStorage()
+						}
+					} message: {
+						Text("They stay in the library and are downloaded again when you open them.")
 					}
-					refreshStorage()
+			}
+			Section("Metadata") {
+				Button("Re-read Metadata") {
+					Task { await model.refreshMetadata() }
 				}
+				.disabled(model.job != nil)
+				Text("Reads titles, series and contents again from every comic’s ComicInfo, keeping reading progress and bookmarks.")
+					.font(.caption)
+					.foregroundStyle(.secondary)
 			}
 			Section("Backup") {
 				Text("A backup holds reading progress, favorites, bookmarks and the comics you imported yourself. The iPhone and iPad app reads the same file.")

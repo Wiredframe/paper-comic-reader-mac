@@ -85,6 +85,9 @@ final class PageImageStore: @unchecked Sendable {
         self.paperEnabled = paperEnabled
         self.paperParams = paperParams
         cache.countLimit = 10   // current page + double-page spread + ±2 prefetch fan-out
+        // Mac port: display images are larger here (see displayMaxPixel), so bound them by bytes
+        // too: ten 3200-pixel pages would otherwise hold a quarter of a gigabyte per tab.
+        cache.totalCostLimit = 160 * 1024 * 1024
         // Bound the grid/bookmark thumbnails by decoded bytes so a long comic's page grid
         // (a 320/480px thumb each) can't grow the cache without limit for the reader session.
         thumbCache.totalCostLimit = 32 * 1024 * 1024   // ~32 MB
@@ -126,7 +129,7 @@ final class PageImageStore: @unchecked Sendable {
                 return
             }
             let image = self.render(index: index)
-            if let image { self.cache.setObject(CGImageBox(image), forKey: NSNumber(value: index)) }
+            if let image { self.cache.setObject(CGImageBox(image), forKey: NSNumber(value: index), cost: Self.cost(of: image)) }
             DispatchQueue.main.async { completion(index, image) }
         }
         return flag
@@ -164,7 +167,7 @@ final class PageImageStore: @unchecked Sendable {
         work.async { [weak self] in
             guard let self, self.isNearActive(index), self.cachedImage(at: index) == nil else { return }
             if let image = self.render(index: index) {
-                self.cache.setObject(CGImageBox(image), forKey: NSNumber(value: index))
+                self.cache.setObject(CGImageBox(image), forKey: NSNumber(value: index), cost: Self.cost(of: image))
             }
         }
     }

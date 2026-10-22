@@ -41,13 +41,13 @@ struct AppCommands: Commands {
 			.pickerStyle(.inline)
 			Toggle("Fit Window to Pages", isOn: binding(\.fitWindow))
 			Divider()
-			Button("Zoom In") { NSApp.sendAction(#selector(PageCanvasView.zoomIn(_:)), to: nil, from: nil) }
+			Button("Zoom In") { session?.canvas.view?.zoomIn(nil) }
 				.keyboardShortcut("+")
 				.disabled(session == nil)
-			Button("Zoom Out") { NSApp.sendAction(#selector(PageCanvasView.zoomOut(_:)), to: nil, from: nil) }
+			Button("Zoom Out") { session?.canvas.view?.zoomOut(nil) }
 				.keyboardShortcut("-")
 				.disabled(session == nil)
-			Button("Actual Size") { NSApp.sendAction(#selector(PageCanvasView.zoomToActualFit(_:)), to: nil, from: nil) }
+			Button("Actual Size") { session?.canvas.view?.zoomToActualFit(nil) }
 				.keyboardShortcut("0")
 				.disabled(session == nil)
 			Divider()
@@ -78,7 +78,7 @@ struct AppCommands: Commands {
 			Button("Back to Library") { window?.leaveReader?() }
 				.keyboardShortcut("l", modifiers: [.command, .shift])
 				.disabled(window?.leaveReader == nil)
-			Button("New Library Tab") { window?.openInNewTab(nil) }
+			Button("New Library Tab") { window?.newTab() }
 				.keyboardShortcut("t")
 		}
 	}

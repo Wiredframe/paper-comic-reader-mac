@@ -42,13 +42,22 @@ struct PageCanvasActions {
 	var leave: () -> Void
 }
 
+/// Lets menu commands reach the canvas of a reader directly, rather than through the responder
+/// chain, which loses it whenever something else holds the focus.
+@MainActor
+final class CanvasBridge {
+	weak var view: PageCanvasView?
+}
+
 struct PageCanvas: NSViewRepresentable {
 	let store: PageImageStore
+	let bridge: CanvasBridge
 	let state: PageCanvasState
 	let actions: PageCanvasActions
 
 	func makeNSView(context: Context) -> PageCanvasView {
 		let view = PageCanvasView(store: store)
+		bridge.view = view
 		view.actions = actions
 		view.apply(state)
 		return view
@@ -99,7 +108,8 @@ final class PageCanvasView: NSView {
 		scrollView.frame = bounds
 		addSubview(scrollView)
 
-		spread.canvas = self
+		spread.tracker.canvas = self
+		(scrollView.contentView as? CenteringClipView)?.tracker = spread.tracker
 		scrollView.onSwipe = { [weak self] forward in
 			guard let self else { return }
 			forward ? self.actions?.forward() : self.actions?.backward()
@@ -119,12 +129,14 @@ final class PageCanvasView: NSView {
 	func apply(_ new: PageCanvasState) {
 		let old = state
 		state = new
-		let pagesChanged = old?.pages != new.pages || old?.generation != new.generation
+		let moved = old?.pages != new.pages
+		let pagesChanged = moved || old?.generation != new.generation
 		if pagesChanged || old?.rightToLeft != new.rightToLeft {
-			showPages(new.pages, rightToLeft: new.rightToLeft, keepImages: old?.pages == new.pages)
+			showPages(new.pages, rightToLeft: new.rightToLeft, keepImages: !moved, prefetch: moved)
 		}
 		if old?.fitWindow == true, !new.fitWindow { restoreWindowFrame() }
-		if pagesChanged || old?.fit != new.fit || old?.fitWindow != new.fitWindow {
+		// A new paper look keeps the zoom and the place on the page; only a turn starts over.
+		if moved || old?.fit != new.fit || old?.fitWindow != new.fitWindow || old?.rightToLeft != new.rightToLeft {
 			// A new page starts at its top, unzoomed: carrying a zoom across a turn lands the
 			// reader in the middle of a page they haven't seen yet.
 			scrollView.magnification = 1
@@ -134,9 +146,13 @@ final class PageCanvasView: NSView {
 		if old?.liveText != new.liveText || pagesChanged {
 			pageViews.forEach { $0.setLiveText(new.liveText) }
 		}
+		// Back from the page grid or a toolbar click, the keys belong to the pages again.
+		if let window, !(window.firstResponder is NSText), window.firstResponder !== self {
+			window.makeFirstResponder(self)
+		}
 	}
 
-	private func showPages(_ pages: [Int], rightToLeft: Bool, keepImages: Bool) {
+	private func showPages(_ pages: [Int], rightToLeft: Bool, keepImages: Bool, prefetch: Bool) {
 		requests.forEach { $0.cancel() }
 		requests = []
 		let ordered = rightToLeft ? Array(pages.reversed()) : pages
@@ -165,6 +181,9 @@ final class PageCanvasView: NSView {
 				requests.append(flag)
 			}
 		}
+		// Only after a turn. After a paper change the neighbours would each be rendered again,
+		// and a slider drag would queue renders nobody waits for.
+		guard prefetch else { return }
 		if let last = pages.last { store.prefetch(around: last) }
 		if let first = pages.first { store.prefetch(around: first) }
 	}
@@ -295,6 +314,8 @@ final class PageCanvasView: NSView {
 			event.modifierFlags.contains(.shift) ? pageUpOrBack() : pageDownOrOn()
 		case 121: pageDownOrOn()   // page down
 		case 116: pageUpOrBack()   // page up
+		case 125: scrollLine(down: true)   // down arrow
+		case 126: scrollLine(down: false)  // up arrow
 		case 115: actions.first()  // home
 		case 119: actions.last()   // end
 		case 53: actions.leave()   // escape
@@ -302,6 +323,15 @@ final class PageCanvasView: NSView {
 		default:
 			super.keyDown(with: event)
 		}
+	}
+
+	/// Arrow keys up and down move along a page that is taller than the window.
+	private func scrollLine(down: Bool) {
+		let clip = scrollView.contentView
+		var origin = clip.bounds.origin
+		origin.y += down ? 60 : -60
+		clip.animator().setBoundsOrigin(clip.constrainBoundsRect(NSRect(origin: origin, size: clip.bounds.size)).origin)
+		scrollView.reflectScrolledClipView(clip)
 	}
 
 	/// Scrolls one screen down when there is more of the page below, otherwise turns.
@@ -344,49 +374,77 @@ final class PageCanvasView: NSView {
 
 	// MARK: Mouse
 
-	/// Called by the spread for a single click that wasn't a drag or a text selection.
-	fileprivate func clicked(at point: NSPoint, clickCount: Int) {
+	/// A click that wasn't a drag or a text selection, anywhere on the canvas (the pages or the
+	/// margin around them), in window coordinates. The outer thirds turn the page, every click
+	/// of a quick series counting, so clicking fast flips fast; a double click in the middle
+	/// third switches between fitting the page and the width.
+	fileprivate func clicked(atWindowPoint point: NSPoint, clickCount: Int) {
 		guard let actions, let state else { return }
-		if clickCount == 2 {
-			actions.toggleFit()
+		window?.makeFirstResponder(self)
+		let x = convert(point, from: nil).x
+		let third = bounds.width / 3
+		let zone: Int = x < third ? -1 : (x > bounds.width - third ? 1 : 0)
+		if zone == 0 {
+			if clickCount == 2 { actions.toggleFit() }
 			return
 		}
 		guard state.clickToTurn, scrollView.magnification <= 1.01 else { return }
-		let inCanvas = convert(point, from: spread)
-		let third = bounds.width / 3
-		if inCanvas.x > bounds.width - third {
-			state.rightToLeft ? actions.backward() : actions.forward()
-		} else if inCanvas.x < third {
-			state.rightToLeft ? actions.forward() : actions.backward()
-		}
+		let towardsRight = zone == 1
+		towardsRight != state.rightToLeft ? actions.forward() : actions.backward()
+	}
+
+	/// Dragging a magnified page moves it, like a sheet of paper under the hand.
+	fileprivate func dragged(by delta: NSPoint) {
+		guard scrollView.magnification > 1.01 else { return }
+		let clip = scrollView.contentView
+		var origin = clip.bounds.origin
+		origin.x -= delta.x / scrollView.magnification
+		origin.y += delta.y / scrollView.magnification
+		clip.setBoundsOrigin(clip.constrainBoundsRect(NSRect(origin: origin, size: clip.bounds.size)).origin)
+		scrollView.reflectScrolledClipView(clip)
 	}
 }
 
 // MARK: - Spread and pages
 
+/// Clicks and drags on the pages and on the margin around them, shared by the document view
+/// and the clip view, so the whole canvas answers the same way.
+private final class ClickTracker {
+	weak var canvas: PageCanvasView?
+	private var downPoint: NSPoint?
+	private var lastPoint: NSPoint?
+	private var dragged = false
+
+	func mouseDown(_ event: NSEvent) {
+		downPoint = event.locationInWindow
+		lastPoint = event.locationInWindow
+		dragged = false
+	}
+
+	func mouseDragged(_ event: NSEvent) {
+		guard let last = lastPoint, let down = downPoint else { return }
+		let point = event.locationInWindow
+		if hypot(point.x - down.x, point.y - down.y) >= 4 { dragged = true }
+		canvas?.dragged(by: NSPoint(x: point.x - last.x, y: point.y - last.y))
+		lastPoint = point
+	}
+
+	func mouseUp(_ event: NSEvent) {
+		defer { downPoint = nil; lastPoint = nil }
+		// A drag is a pan, never a page turn.
+		guard downPoint != nil, !dragged else { return }
+		canvas?.clicked(atWindowPoint: event.locationInWindow, clickCount: event.clickCount)
+	}
+}
+
 /// The document view: top-down coordinates, and the place clicks on the pages land.
 private final class SpreadView: NSView {
-	weak var canvas: PageCanvasView?
-	private var mouseDownPoint: NSPoint?
+	let tracker = ClickTracker()
 
 	override var isFlipped: Bool { true }
-
-	override func mouseDown(with event: NSEvent) {
-		mouseDownPoint = event.locationInWindow
-		if event.clickCount == 2 {
-			canvas?.clicked(at: convert(event.locationInWindow, from: nil), clickCount: 2)
-			mouseDownPoint = nil
-		}
-	}
-
-	override func mouseUp(with event: NSEvent) {
-		guard let start = mouseDownPoint, event.clickCount <= 1 else { return }
-		mouseDownPoint = nil
-		let end = event.locationInWindow
-		// A drag is a pan, never a page turn.
-		guard hypot(end.x - start.x, end.y - start.y) < 4 else { return }
-		canvas?.clicked(at: convert(end, from: nil), clickCount: 1)
-	}
+	override func mouseDown(with event: NSEvent) { tracker.mouseDown(event) }
+	override func mouseDragged(with event: NSEvent) { tracker.mouseDragged(event) }
+	override func mouseUp(with event: NSEvent) { tracker.mouseUp(event) }
 }
 
 /// One page: its image as layer contents, scaled to the frame the canvas gives it, with the
@@ -479,6 +537,13 @@ private final class PageView: NSView {
 
 /// Keeps a spread smaller than the window in the middle of it rather than in a corner.
 private final class CenteringClipView: NSClipView {
+	/// Clicks on the margin beside a small spread land here, not on the spread.
+	var tracker: ClickTracker?
+
+	override func mouseDown(with event: NSEvent) { tracker?.mouseDown(event) ?? super.mouseDown(with: event) }
+	override func mouseDragged(with event: NSEvent) { tracker?.mouseDragged(event) ?? super.mouseDragged(with: event) }
+	override func mouseUp(with event: NSEvent) { tracker?.mouseUp(event) ?? super.mouseUp(with: event) }
+
 	override func constrainBoundsRect(_ proposedBounds: NSRect) -> NSRect {
 		var rect = super.constrainBoundsRect(proposedBounds)
 		guard let document = documentView else { return rect }
@@ -492,36 +557,55 @@ private final class CenteringClipView: NSClipView {
 	}
 }
 
-/// Turns a two-finger horizontal swipe into one page turn, but only while the page has no
-/// room to scroll sideways; a zoomed page pans as usual.
+/// Turns a two-finger horizontal swipe into one page turn, but only while the page has no room
+/// to scroll sideways; a zoomed page pans as usual. Each gesture decides once, on its first
+/// clear movement, whether it is a swipe or a scroll, and sticks to that until the fingers lift
+/// and its momentum has run out, so a slightly diagonal scroll is never swallowed and a swipe
+/// never turns twice.
 private final class CenteringScrollView: NSScrollView {
 	var onSwipe: ((_ forward: Bool) -> Void)?
+
+	private enum Gesture { case undecided, swipe, scroll }
+	private var gesture = Gesture.undecided
 	private var swipeDistance: CGFloat = 0
 	private var swipeHandled = false
 
 	override func scrollWheel(with event: NSEvent) {
-		let document = documentView?.frame.width ?? 0
-		let canPanSideways = document * magnification > contentView.bounds.width * magnification + 1
-		guard event.hasPreciseScrollingDeltas, !canPanSideways,
-			  abs(event.scrollingDeltaX) > abs(event.scrollingDeltaY) || swipeDistance != 0 else {
-			super.scrollWheel(with: event)
-			return
-		}
-		if event.phase == .began {
+		// A mouse wheel, or a gesture this view didn't see begin: plain scrolling.
+		guard event.hasPreciseScrollingDeltas else { return super.scrollWheel(with: event) }
+
+		if event.phase == .began || event.phase == .mayBegin {
+			gesture = .undecided
 			swipeDistance = 0
 			swipeHandled = false
 		}
-		swipeDistance += event.scrollingDeltaX
-		if !swipeHandled, abs(swipeDistance) > 60 {
-			swipeHandled = true
-			// Content follows the fingers: a swipe to the left brings the next page in from
-			// the right. The canvas maps that onto reading order.
-			let towardsRight = swipeDistance < 0
-			let rtl = (superview as? PageCanvasView)?.isRightToLeft ?? false
-			onSwipe?(towardsRight != rtl)
+
+		if gesture == .undecided, event.phase != [] {
+			let dx = abs(event.scrollingDeltaX), dy = abs(event.scrollingDeltaY)
+			if dx + dy > 0.5 {
+				let document = documentView?.frame.width ?? 0
+				let canPanSideways = document * magnification > contentView.frame.width + 1
+				gesture = (dx > dy * 1.5 && !canPanSideways) ? .swipe : .scroll
+			}
 		}
-		if event.phase == .ended || event.phase == .cancelled || event.momentumPhase == .ended {
-			swipeDistance = 0
+
+		switch gesture {
+		case .swipe:
+			if event.phase != [] {
+				swipeDistance += event.scrollingDeltaX
+				if !swipeHandled, abs(swipeDistance) > 50 {
+					swipeHandled = true
+					// Content follows the fingers: swiping to the left brings in the page on
+					// the right. The canvas maps that onto reading order.
+					let towardsRight = swipeDistance < 0
+					let rtl = (superview as? PageCanvasView)?.isRightToLeft ?? false
+					onSwipe?(towardsRight != rtl)
+				}
+			}
+			// Its momentum events (phase empty) are swallowed with it; the next gesture's
+			// `.began` starts over.
+		case .scroll, .undecided:
+			super.scrollWheel(with: event)
 		}
 	}
 }

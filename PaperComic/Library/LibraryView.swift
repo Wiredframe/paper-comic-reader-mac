@@ -79,6 +79,7 @@ struct LibraryView: View {
 	@State private var hovered: UUID?
 	@State private var pendingDeletion: ComicBook?
 	@FocusState private var gridFocused: Bool
+	@State private var didFocusGrid = false
 	/// How many covers fit across, for moving the selection by a row.
 	@State private var columns = 1
 
@@ -112,7 +113,11 @@ struct LibraryView: View {
 				pendingDeletion = nil
 			}
 		} message: {
-			Text("The comic file in the library folder is not deleted.")
+			if pendingDeletion?.isFolderBacked == true {
+				Text("The comic file in the library folder is not deleted.")
+			} else {
+				Text("This comic was imported into the library. Its file is deleted with it.")
+			}
 		}
 	}
 
@@ -215,7 +220,14 @@ struct LibraryView: View {
 		.focusable()
 		.focusEffectDisabled()
 		.focused($gridFocused)
-		.onAppear { gridFocused = true }
+		.onAppear {
+			// Once, when the library first shows: not every time a search brings the grid back,
+			// which would pull the focus out of the search field mid-word.
+			if !didFocusGrid {
+				didFocusGrid = true
+				gridFocused = true
+			}
+		}
 		.onKeyPress(.leftArrow) { move(-1, in: visible) }
 		.onKeyPress(.rightArrow) { move(1, in: visible) }
 		.onKeyPress(.upArrow) { move(-columns, in: visible) }
@@ -265,6 +277,7 @@ struct LibraryView: View {
 	@ViewBuilder
 	private func menu(for book: ComicBook) -> some View {
 		Button("Open") { onOpen(book, nil) }
+		Button("Open in New Tab") { model.openInNewTab(book.id) }
 		Divider()
 		Button(book.isFavorite ? "Remove from Favorites" : "Add to Favorites") { model.toggleFavorite(book) }
 		Button(book.isRead ? "Mark as Unread" : "Mark as Read") { model.toggleRead(book) }

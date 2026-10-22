@@ -42,7 +42,6 @@ struct ReaderView: View {
 				.onChange(of: geometry.size.height) { _, height in hoverHeight = height }
 		})
 		.task { await session.open() }
-		.onDisappear { session.close() }
 		.onChange(of: model.paper.isEnabled) { session.paperChanged() }
 		.onChange(of: model.paper.params) { session.paperChanged() }
 		.onChange(of: settings.doublePage) { session.layoutChanged() }
@@ -67,6 +66,7 @@ struct ReaderView: View {
 		case .ready:
 			if let store = session.store {
 				PageCanvas(store: store,
+						   bridge: session.canvas,
 						   state: PageCanvasState(pages: session.visiblePages,
 												  generation: session.paperGeneration,
 												  fit: settings.fit,
@@ -97,6 +97,15 @@ struct ReaderView: View {
 			} description: {
 				Text(message)
 			} actions: {
+				if session.book.isFolderBacked {
+					Button("Try Again") { session.retry() }
+						.buttonStyle(.borderedProminent)
+					Button("Choose Library Folder…") {
+						model.chooseLibraryFolder()
+						session.retry()
+					}
+				}
+				Button("Choose the Comic’s File…", action: chooseFile)
 				Button("Back to Library", action: onLeave)
 			}
 		}
@@ -105,15 +114,20 @@ struct ReaderView: View {
 	// MARK: Page bar
 
 	private var pageBar: some View {
-		HStack(spacing: 12) {
-			Button { session.previous() } label: { Image(systemName: settings.rightToLeft ? "chevron.right" : "chevron.left") }
-				.disabled(!session.canGoPrevious)
-			Slider(value: Binding(get: { Double(session.currentPage) },
-								  set: { session.go(to: Int($0.rounded())) }),
-				   in: 0...Double(max(session.pageCount - 1, 1)))
-				.environment(\.layoutDirection, settings.rightToLeft ? .rightToLeft : .leftToRight)
-			Button { session.next() } label: { Image(systemName: settings.rightToLeft ? "chevron.left" : "chevron.right") }
-				.disabled(!session.canGoNext)
+		// Laid out the way the pages are: in right-to-left order the next page, the slider's end
+		// and the arrow that leads there are all on the left.
+		let rtl = settings.rightToLeft
+		return HStack(spacing: 12) {
+			Button { rtl ? session.next() : session.previous() } label: { Image(systemName: "chevron.left") }
+				.disabled(rtl ? !session.canGoNext : !session.canGoPrevious)
+			Slider(value: Binding(get: { Double(rtl ? lastIndex - session.anchorPage : session.anchorPage) },
+								  set: { value in
+									  let page = Int(value.rounded())
+									  session.go(to: rtl ? lastIndex - page : page)
+								  }),
+				   in: 0...Double(max(lastIndex, 1)))
+			Button { rtl ? session.previous() : session.next() } label: { Image(systemName: "chevron.right") }
+				.disabled(rtl ? !session.canGoPrevious : !session.canGoNext)
 			Text(pageLabel)
 				.monospacedDigit()
 				.foregroundStyle(.secondary)
@@ -127,6 +141,8 @@ struct ReaderView: View {
 		.padding(.bottom, 16)
 		.frame(maxWidth: 760)
 	}
+
+	private var lastIndex: Int { max(session.pageCount - 1, 0) }
 
 	private var pageLabel: String {
 		let pages = session.visiblePages.map { $0 + 1 }
@@ -184,6 +200,15 @@ struct ReaderView: View {
 			}
 			.help("Paper effect")
 		}
+	}
+
+	private func chooseFile() {
+		let panel = NSOpenPanel()
+		panel.allowedContentTypes = ComicFileTypes.all
+		panel.allowsMultipleSelection = false
+		panel.message = String(localized: "Choose the file of “\(session.book.displayTitle)”.")
+		guard panel.runModal() == .OK, let url = panel.url else { return }
+		session.relink(to: url)
 	}
 
 	private func toggleFit() {

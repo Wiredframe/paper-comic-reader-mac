@@ -9,6 +9,7 @@
 
 import AppKit
 import SwiftData
+import ZIPFoundation
 import UniformTypeIdentifiers
 
 @MainActor
@@ -31,6 +32,8 @@ final class AppModel {
 		var total: Int
 	}
 	private(set) var job: Job?
+	/// A scan is running. Kept apart from `job`, which an import may set and clear meanwhile.
+	private(set) var isScanning = false
 	/// What the last scan or import could not read, shown once as a count.
 	private(set) var skippedCount = 0
 
@@ -42,26 +45,44 @@ final class AppModel {
 	}
 	var message: Message?
 
-	/// Comics asked to open from outside (Finder, Dock, Open…) before any window was there to
-	/// take them. The first window that appears picks them up.
+	/// Comics waiting for a window. A new window takes the first and opens a tab for each of the
+	/// rest; with no window around, `openWindow` makes one.
 	var pendingOpen: [UUID] = []
-	/// Opens a window (a tab, with tabbing preferred) showing a comic, or the library for nil.
-	/// Set by the first window, because only a view can reach SwiftUI's openWindow.
-	var openWindow: ((UUID?) -> Void)?
+	/// Opens a new window (a tab, with tabbing preferred), which then takes the next comic from
+	/// `pendingOpen`. Set by the first window, because only a view can reach SwiftUI's openWindow.
+	var openWindow: (() -> Void)?
+	/// Set while comics opened from the Finder wait: the frontmost window takes them if it shows
+	/// the library, rather than leaving an empty library tab behind.
+	var frontWindowMayTakePending = false
 	/// The readers open in any window, so their progress can be written when the app quits.
-	private var sessions: [UUID: ReaderSession] = [:]
+	private var sessions: [ObjectIdentifier: ReaderSession] = [:]
+	/// Comics removed from the library; a window still reading one goes back to the library.
+	private(set) var removedBookIDs: Set<UUID> = []
 
-	func register(_ session: ReaderSession) { sessions[session.id] = session }
-	func unregister(_ session: ReaderSession) {
-		if sessions[session.id] === session { sessions[session.id] = nil }
+	func register(_ session: ReaderSession) { sessions[ObjectIdentifier(session)] = session }
+	func unregister(_ session: ReaderSession) { sessions[ObjectIdentifier(session)] = nil }
+
+	/// Opens a comic in a new tab.
+	func openInNewTab(_ id: UUID) {
+		pendingOpen.append(id)
+		openWindow?()
 	}
 
-	/// Writes everything that is otherwise only written when a reader closes.
-	func prepareToQuit() {
+	/// Writes the reading position of every open reader. Before quitting, and before anything
+	/// that copies the library (snapshot, export), so they carry the page the reader is on.
+	func persistOpenReaders() {
 		sessions.values.forEach { $0.persistProgress() }
+	}
+
+	func prepareToQuit() {
+		persistOpenReaders()
 		try? context.save()
 		saveSnapshot()
 	}
+
+	/// The store couldn't be opened and was set aside (see LibraryStore). The first window asks
+	/// whether to rebuild the library from the safety snapshot.
+	private(set) var offersRecovery = false
 
 	init() {
 		// Before PaperSettings exists: under @Observable its init writes the defaults it read,
@@ -75,6 +96,11 @@ final class AppModel {
 		BackupDevice.refreshName()
 		if !isTemporaryStore {
 			LegacyMigration.runIfNeeded(into: container.mainContext)
+		}
+		offersRecovery = !isTemporaryStore && LibraryReset.isPending
+		if isTemporaryStore {
+			message = Message(title: String(localized: "Your library couldn’t be opened"),
+							  text: String(localized: "The disk may be full or the library file busy. Paper Comic is running with an empty library for now, and nothing you do is kept. Quit and open it again to retry."))
 		}
 		Task { await self.tidyUp() }
 	}
@@ -110,7 +136,9 @@ final class AppModel {
 	}
 
 	func scanLibraryFolder() async {
-		guard job == nil, LibrarySource.isConfigured else { return }
+		guard !isScanning, job == nil, LibrarySource.isConfigured else { return }
+		isScanning = true
+		defer { isScanning = false }
 		let books = (try? context.fetch(FetchDescriptor<ComicBook>())) ?? []
 		let existing = Set(books.compactMap(\.sourceRelativePath))
 		let title = LibrarySource.displayName ?? String(localized: "Library Folder")
@@ -131,6 +159,18 @@ final class AppModel {
 		saveSnapshot()
 	}
 
+	/// Re-reads every comic's ComicInfo (see Importer.refreshMetadata).
+	func refreshMetadata() async {
+		guard job == nil else { return }
+		let books = (try? context.fetch(FetchDescriptor<ComicBook>())) ?? []
+		let title = String(localized: "Reading Metadata")
+		job = Job(title: title, done: 0, total: books.count)
+		await Importer.refreshMetadata(for: books, into: context) { done, total in
+			self.job = Job(title: title, done: done, total: total)
+		}
+		job = nil
+	}
+
 	// MARK: Importing files
 
 	/// Lets the user pick comic files to copy into the library.
@@ -146,41 +186,62 @@ final class AppModel {
 	}
 
 	/// Imports files, recognising comics the library already has. Returns the library entry
-	/// for every file, new or existing, in the order given.
+	/// for every file, new or existing, in the order given. Imports run one after another, so
+	/// two that overlap (a Finder open during an import) can't both add the same comic.
 	func importFiles(_ urls: [URL]) async -> [ComicBook] {
 		guard !urls.isEmpty else { return [] }
-		let books = (try? context.fetch(FetchDescriptor<ComicBook>())) ?? []
-		let existing = books.map(Importer.ExistingArchive.init(book:))
+		let previous = importChain
+		// Ids rather than models cross the task boundary: SwiftData models aren't Sendable.
+		let task = Task { @MainActor () -> [UUID] in
+			_ = await previous?.value
+			return await self.runImport(urls).map(\.id)
+		}
+		importChain = Task { _ = await task.value }
+		return await task.value.compactMap { book(id: $0) }
+	}
+
+	private var importChain: Task<Void, Never>?
+
+	private func runImport(_ urls: [URL]) async -> [ComicBook] {
+		var books = (try? context.fetch(FetchDescriptor<ComicBook>())) ?? []
+		var existing = books.map(Importer.ExistingArchive.init(book:))
 		var result: [ComicBook] = []
 		var skipped = 0
-		let showsProgress = urls.count > 1
-		if showsProgress { job = Job(title: String(localized: "Importing"), done: 0, total: urls.count) }
+		let ownsJob = urls.count > 1 && job == nil
+		if ownsJob { job = Job(title: String(localized: "Importing"), done: 0, total: urls.count) }
+		defer { if ownsJob { job = nil } }
 		for (index, url) in urls.enumerated() {
+			defer { if ownsJob { job?.done = index + 1 } }
 			if let id = await Task.detached(priority: .userInitiated, operation: {
 				Importer.duplicate(of: url, among: existing)
 			}).value, let book = books.first(where: { $0.id == id }) {
 				result.append(book)
-			} else if let returning = await Task.detached(operation: { Importer.removedFolderPath(of: url) }).value,
-					  let prepared = try? await Task.detached(priority: .userInitiated, operation: {
-						  try Importer.prepare(from: url)
-					  }).value {
-				result.append(Importer.commitReturning(prepared, relativePath: returning, into: context))
-			} else if let prepared = try? await Task.detached(priority: .userInitiated, operation: {
-				try Importer.prepare(from: url)
-			}).value {
-				if let id = Importer.undownloadedFolderEntry(matching: prepared, among: existing),
-				   let book = books.first(where: { $0.id == id }) {
-					Importer.adoptAsDownload(prepared, into: book, from: context)
-					result.append(book)
-				} else {
-					result.append(Importer.commit(prepared, into: context))
-				}
-			} else {
-				skipped += 1
+				continue
 			}
-			if showsProgress { job?.done = index + 1 }
+			guard let prepared = try? await Task.detached(priority: .userInitiated, operation: {
+				try Importer.prepare(from: url)
+			}).value else {
+				skipped += 1
+				continue
+			}
+			let book: ComicBook
+			if let returning = await Task.detached(operation: { Importer.removedFolderPath(of: url) }).value {
+				book = Importer.commitReturning(prepared, relativePath: returning, into: context)
+			} else if let id = Importer.undownloadedFolderEntry(matching: prepared, among: existing),
+					  let match = books.first(where: { $0.id == id }) {
+				Importer.adoptAsDownload(prepared, into: match, from: context)
+				book = match
+			} else {
+				book = Importer.commit(prepared, into: context)
+			}
+			result.append(book)
+			// What was just added counts for the rest of the batch: the same file twice in one
+			// import is one comic.
+			books.removeAll { $0.id == book.id }
+			books.append(book)
+			existing.removeAll { $0.id == book.id }
+			existing.append(Importer.ExistingArchive(book: book))
 		}
-		job = nil
 		if skipped > 0 {
 			show(String(localized: "Some files couldn’t be imported"),
 				 String(localized: "\(skipped) of \(urls.count) files aren’t readable comics (CBZ)."))
@@ -190,17 +251,21 @@ final class AppModel {
 	}
 
 	/// Files opened from the Finder, the Dock or the Open menu: brought into the library, then
-	/// shown in a window.
+	/// shown, each in a tab of its own. A library backup opened this way is restored instead.
 	func openExternal(_ urls: [URL]) {
-		let comics = urls.filter { ComicFileTypes.isComic($0) }
+		let candidates = urls.filter { ComicFileTypes.isComic($0) }
+		let backups = candidates.filter { LibraryBackupArchive.looksLikeBackup($0) }
+		let comics = candidates.filter { !backups.contains($0) }
+		if let backup = backups.first { restoreLibrary(from: backup) }
 		guard !comics.isEmpty else { return }
 		Task {
 			let books = await importFiles(comics)
-			guard !books.isEmpty else { return }
-			if let openWindow {
-				books.forEach { openWindow($0.id) }
-			} else {
-				pendingOpen.append(contentsOf: books.map(\.id))
+			pendingOpen.append(contentsOf: books.map(\.id))
+			frontWindowMayTakePending = true
+			// Give the front window a turn to take them; whatever is left gets a window.
+			DispatchQueue.main.async {
+				self.frontWindowMayTakePending = false
+				if !self.pendingOpen.isEmpty { self.openWindow?() }
 			}
 		}
 	}
@@ -209,6 +274,9 @@ final class AppModel {
 
 	func delete(_ book: ComicBook) {
 		downloads.cancel(book.id)
+		// Readers showing it close first, writing nothing back to a comic that is going away.
+		removedBookIDs.insert(book.id)
+		sessions.values.filter { $0.book.id == book.id }.forEach { $0.close() }
 		Importer.delete(book, from: context)
 	}
 
@@ -251,6 +319,7 @@ final class AppModel {
 		panel.nameFieldStringValue = "Paper Comic Library \(day).zip"
 		panel.prompt = String(localized: "Export")
 		guard panel.runModal() == .OK, let destination = panel.url else { return }
+		persistOpenReaders()
 		let books = (try? context.fetch(FetchDescriptor<ComicBook>())) ?? []
 		let backup = LibraryBackupStore.capture(from: books)
 		job = Job(title: String(localized: "Exporting Library"), done: 0, total: 0)
@@ -282,6 +351,11 @@ final class AppModel {
 		panel.prompt = String(localized: "Import")
 		panel.message = String(localized: "Choose a library backup from Paper Comic on the Mac, iPhone or iPad. Reading progress, favorites and bookmarks are merged into this library.")
 		guard panel.runModal() == .OK, let url = panel.url else { return }
+		restoreLibrary(from: url)
+	}
+
+	func restoreLibrary(from url: URL) {
+		guard job == nil else { return }
 		job = Job(title: String(localized: "Importing Library"), done: 0, total: 0)
 		Task {
 			let opened = await Task.detached(priority: .userInitiated) {
@@ -308,6 +382,7 @@ final class AppModel {
 	/// to the background or quits.
 	func saveSnapshot() {
 		guard !isTemporaryStore else { return }
+		persistOpenReaders()
 		LibrarySnapshot.save((try? context.fetch(FetchDescriptor<ComicBook>())) ?? [])
 	}
 
@@ -336,6 +411,18 @@ final class AppModel {
 		return sentences.joined(separator: " ")
 	}
 
+	/// Answers the recovery question, either way clearing it for good.
+	func recover(restore: Bool) {
+		offersRecovery = false
+		if restore, let snapshot = LibrarySnapshot.load() {
+			LibraryReset.isPending = false
+			LibrarySnapshot.restore(snapshot, into: context)
+		} else {
+			LibraryReset.isPending = false
+		}
+		saveSnapshot()
+	}
+
 	// MARK: Messages
 
 	func show(_ title: String, _ text: String) {
@@ -353,5 +440,15 @@ enum ComicFileTypes {
 
 	static func isComic(_ url: URL) -> Bool {
 		["cbz", "zip"].contains(url.pathExtension.lowercased())
+	}
+}
+
+extension LibraryBackupArchive {
+	/// Mac port: whether a ZIP is a library backup rather than a comic, judged by the document
+	/// at its root, so opening one from the Finder restores it instead of importing its covers.
+	static func looksLikeBackup(_ url: URL) -> Bool {
+		guard url.pathExtension.lowercased() == "zip",
+			  let archive = try? Archive(url: url, accessMode: .read, pathEncoding: nil) else { return false }
+		return archive["library.json"] != nil
 	}
 }

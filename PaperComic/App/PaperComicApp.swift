@@ -12,8 +12,8 @@ struct PaperComicApp: App {
 	@NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
 	var body: some Scene {
-		WindowGroup(id: "main", for: UUID.self) { $comic in
-			RootView(requested: comic)
+		WindowGroup(id: "main") {
+			RootView()
 				.environment(appDelegate.model)
 				.environment(appDelegate.model.paper)
 				.modelContainer(appDelegate.model.container)

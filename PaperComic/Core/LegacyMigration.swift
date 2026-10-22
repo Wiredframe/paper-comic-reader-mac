@@ -157,7 +157,7 @@ enum LegacyMigration {
 			if let old = entry.coverName {
 				let source = root.appendingPathComponent("Covers").appendingPathComponent(old)
 				let target = Storage.coverURL(old)
-				if fm.fileExists(atPath: target.path) || (try? fm.copyItem(at: source, to: target)) != nil {
+				if fm.fileExists(atPath: target.path) || copy(source, to: target) {
 					coverName = old
 				}
 			}
@@ -167,7 +167,7 @@ enum LegacyMigration {
 			var hasArchive = false
 			if fm.fileExists(atPath: oldArchive.path) {
 				let target = Storage.comicURL(fileName)
-				if fm.fileExists(atPath: target.path) || (try? fm.copyItem(at: oldArchive, to: target)) != nil {
+				if fm.fileExists(atPath: target.path) || copy(oldArchive, to: target) {
 					hasArchive = true
 					result.copiedArchives += 1
 					if isFolderBacked { Storage.excludeFromDeviceBackup(target) }
@@ -209,6 +209,22 @@ enum LegacyMigration {
 		}
 		try context.save()
 		return result
+	}
+
+	/// Copies through a temporary name, so a copy cut short (the app quit mid-way) never sits at
+	/// the final name, where the next run would take it for complete.
+	private static func copy(_ source: URL, to target: URL) -> Bool {
+		let fm = FileManager.default
+		let temp = target.appendingPathExtension("migrating")
+		try? fm.removeItem(at: temp)
+		do {
+			try fm.copyItem(at: source, to: temp)
+			try fm.moveItem(at: temp, to: target)
+			return true
+		} catch {
+			try? fm.removeItem(at: temp)
+			return false
+		}
 	}
 
 	// MARK: Paper effect
