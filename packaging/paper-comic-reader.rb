@@ -20,7 +20,7 @@
 
 cask "paper-comic-reader" do
   version "3.0.0"
-  sha256 "0000000000000000000000000000000000000000000000000000000000000000"
+  sha256 "f3e5ac0b8043c75d552a2472a3403a5d0d5df6ba11a957da45f906cb8026d4ca"
 
   url "https://github.com/Wiredframe/paper-comic-reader-mac/releases/download/v#{version}/Paper-Comic-Reader-#{version}.zip"
   name "Paper Comic Reader"
