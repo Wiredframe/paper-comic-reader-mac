@@ -1,0 +1,113 @@
+name: PaperComicReader
+options:
+  bundleIdPrefix: de.wiredframe
+  deploymentTarget:
+    macOS: "14.0"
+  createIntermediateGroups: true
+  minimumXcodeGenVersion: "2.40.0"
+
+# The Mac counterpart of the iOS app (github.com/Wiredframe/comic-reader-ios). The core
+# (archive, model, importer, backup, paper effect) is ported from it file for file, so both
+# read a comic the same way and a library backup moves between them without loss.
+#
+# CBZ (ZIP) reading via ZIPFoundation, as on iOS.
+packages:
+  ZIPFoundation:
+    url: https://github.com/weichsel/ZIPFoundation.git
+    from: "0.9.19"
+
+schemes:
+  Paper Comic Reader:
+    build:
+      targets:
+        Paper Comic Reader: all
+        PaperComicTests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - PaperComicTests
+    archive:
+      config: Release
+
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "3.0.0"
+    CURRENT_PROJECT_VERSION: "1"
+    # Ad-hoc signed and not notarised, on purpose (see scripts/release.sh).
+    CODE_SIGN_IDENTITY: "-"
+    CODE_SIGN_STYLE: Manual
+    DEVELOPMENT_TEAM: ""
+    # PaperKernels.metal is a [[stitchable]] Core Image kernel in the ordinary default.metallib.
+    # The legacy -cikernel/-fcikernel pair renders white pages on OS 27 (see the iOS project).
+    MTLLINKER_FLAGS: "-framework CoreImage"
+    SWIFT_EMIT_LOC_STRINGS: YES
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+    DEAD_CODE_STRIPPING: YES
+
+targets:
+  Paper Comic Reader:
+    type: application
+    platform: macOS
+    dependencies:
+      - package: ZIPFoundation
+      - target: Paper Comic Thumbnails
+    sources:
+      - path: PaperComic
+        excludes:
+          - "App/Info.plist"
+          - "App/PaperComic.entitlements"
+      - path: Resources/Media.xcassets
+    settings:
+      base:
+        PRODUCT_NAME: "Paper Comic Reader"
+        # Unchanged from the Simple Comic fork on purpose: the sandbox container belongs to the
+        # bundle id, and a new one would leave the existing library behind, out of reach.
+        PRODUCT_BUNDLE_IDENTIFIER: de.wiredframe.simplecomic
+        INFOPLIST_FILE: PaperComic/App/Info.plist
+        CODE_SIGN_ENTITLEMENTS: PaperComic/App/PaperComic.entitlements
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: "Accent Color"
+        LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/../Frameworks"
+        ENABLE_HARDENED_RUNTIME: NO
+
+  Paper Comic Thumbnails:
+    type: app-extension
+    platform: macOS
+    dependencies:
+      - package: ZIPFoundation
+    sources:
+      - path: Extensions/Thumbnail
+        excludes:
+          - "Info.plist"
+          - "Thumbnail.entitlements"
+      - path: PaperComic/Core/ComicArchive.swift
+      - path: PaperComic/Core/ImageDownsampler.swift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: de.wiredframe.simplecomic.thumbnails
+        INFOPLIST_FILE: Extensions/Thumbnail/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Extensions/Thumbnail/Thumbnail.entitlements
+        LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/../Frameworks @executable_path/../../../../Frameworks"
+
+  # Unit tests compile the core sources straight in rather than loading the app: a hosted test
+  # would launch the app with its real bundle id, and with it the real sandbox container and
+  # library. Storage is pointed at a temporary folder by the tests themselves.
+  PaperComicTests:
+    type: bundle.unit-test
+    platform: macOS
+    dependencies:
+      - package: ZIPFoundation
+    sources:
+      - path: PaperComicTests
+      - path: PaperComic/Core
+      - path: PaperComic/Backup
+      - path: PaperComic/Paper/PaperParams.swift
+      - path: PaperComic/Paper/PaperFilter.swift
+      - path: PaperComic/Reader/PageImageStore.swift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: de.wiredframe.papercomic.tests
+        GENERATE_INFOPLIST_FILE: YES

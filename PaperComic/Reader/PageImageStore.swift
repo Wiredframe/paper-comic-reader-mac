@@ -1,0 +1,376 @@
+//
+//  PageImageStore.swift
+//  Comic Reader
+//
+//  Decodes comic pages off the main thread, applies the paper effect, and caches
+//  the display-ready images. Archive access is serialised on one queue (the ZIP
+//  reader is not thread-safe). Also vends small thumbnails for the page grid and
+//  bookmarks.
+//
+
+import AppKit
+import ImageIO
+
+/// `@unchecked Sendable` is the design, not a shortcut: every archive read and every mutation
+/// of `paperEnabled` / `paperParams` happens on the private `work` queue (the ZIP reader is
+/// not thread-safe), and both caches are `NSCache`, which is. The type is handed between
+/// the main actor and that queue on every page request. The archive is opened once on
+/// `openQueue` before the store is handed to anyone (see `open`), so that can't race a read.
+final class PageImageStore: @unchecked Sendable {
+
+    /// 0 when the archive couldn't be opened (missing/corrupt file after import) — the
+    /// reader shows an "unavailable" state rather than a run of blank pages, since trusting
+    /// the stale metadata page count would render `pageCount` empty slots.
+    let pageCount: Int
+
+    private let bookID: UUID
+    private let archive: ComicArchive?
+    private let work = DispatchQueue(label: "de.wiredframe.comicreader.page-decode", qos: .userInitiated)
+    /// Opening is one shot per reader session, so it gets its own queue rather than sharing
+    /// `work` — nothing is waiting behind it, and `work` doesn't exist until init returns.
+    private static let openQueue = DispatchQueue(label: "de.wiredframe.comicreader.archive-open",
+                                                 qos: .userInitiated)
+    private let cache = NSCache<NSNumber, CGImageBox>()
+    // Keyed by page index AND target size: the page grid asks for small (320/480px)
+    // thumbnails, a bookmark for a full-size (1200px) shot. Keying by index alone let
+    // a bookmark receive a previously-cached grid thumbnail — a blurry bookmark card.
+    private let thumbCache = NSCache<NSString, CGImageBox>()
+
+    private var paperEnabled: Bool
+    private var paperParams: PaperParams
+
+    /// Counts the paper changes (`setPaper`), so a reader cell can tell its images were rendered
+    /// with an older setting and fetch them again. Main actor only, like `setPaper`.
+    private(set) var paperGeneration = 0
+
+    /// The page the reader is on, set from the controller. Read on the decode queue so a
+    /// prefetch that the reader has already scrolled far past can skip its (paper-heavy)
+    /// render instead of holding up the page actually being turned to. Guarded by a lock
+    /// because it is written on the main actor and read on `work`.
+    private let activePageLock = NSLock()
+    private var activePage = 0
+    /// Pages that wouldn't decode this session (a truncated or corrupt image in the archive). They
+    /// get `unreadablePage` from then on instead of a fresh attempt on every request. Read and
+    /// written on `work`, behind the same lock as `activePage`.
+    private var failedPages: Set<Int> = []
+
+    /// Opens `url` off the main thread and hands back the ready store.
+    ///
+    /// ALWAYS open through this, never by calling `init` directly on the main actor. Opening an
+    /// archive is file I/O whose cost scales with the archive, not with the page being read:
+    /// ZIPFoundation walks the CBZ's central directory entry by entry and seeks to each page's
+    /// *local* header on the way — offsets scattered across the whole file — plus a second seek
+    /// past a page's compressed bytes for the streamed ZIPs that carry a data descriptor. On a
+    /// big comic, or one whose bytes aren't in the page cache yet, that is hundreds of
+    /// milliseconds to seconds — which is exactly how long the app froze while `init` ran on
+    /// the main thread.
+    static func open(bookID: UUID, url: URL,
+                     paperEnabled: Bool, paperParams: PaperParams) async -> PageImageStore {
+        await withCheckedContinuation { continuation in
+            openQueue.async {
+                continuation.resume(returning: PageImageStore(bookID: bookID, url: url,
+                                                              paperEnabled: paperEnabled,
+                                                              paperParams: paperParams))
+            }
+        }
+    }
+
+    /// Private so the blocking open can't accidentally be put back on the main actor — see `open`.
+    /// Takes the book's id and URL rather than the `ComicBook` itself: the model belongs to the
+    /// main actor's SwiftData context and must not be read from the queue this runs on.
+    private init(bookID: UUID, url: URL, paperEnabled: Bool, paperParams: PaperParams) {
+        self.bookID = bookID
+        self.archive = try? ComicArchive(url: url)
+        self.pageCount = archive?.pageCount ?? 0
+        self.paperEnabled = paperEnabled
+        self.paperParams = paperParams
+        cache.countLimit = 10   // current page + double-page spread + ±2 prefetch fan-out
+        // Bound the grid/bookmark thumbnails by decoded bytes so a long comic's page grid
+        // (a 320/480px thumb each) can't grow the cache without limit for the reader session.
+        thumbCache.totalCostLimit = 32 * 1024 * 1024   // ~32 MB
+    }
+
+    // MARK: Display images (paper applied)
+
+    /// The long edge every display image is decoded to. One size for every reader, which is also
+    /// why the cache is keyed by page alone. Mac port: larger than on iOS, because a Retina
+    /// window filled with one page is up to ~2900 pixels tall.
+    static let displayMaxPixel: CGFloat = 3200
+
+    func cachedImage(at index: Int) -> CGImage? {
+        cache.object(forKey: NSNumber(value: index))?.image
+    }
+
+    /// Returns the display image for `index`. Completion runs on the main queue.
+    ///
+    /// Hands back a flag for a request that had to be queued (nil for a cache hit, answered on the
+    /// spot). The cell cancels it when it is reused for another page: a fling along the strip
+    /// requests every page it passes, and on the serial queue the page it lands on would otherwise
+    /// wait behind renders whose results nobody shows any more. A cancelled request never calls
+    /// back.
+    @discardableResult
+    func requestImage(at index: Int, completion: @escaping (Int, CGImage?) -> Void) -> CancelFlag? {
+        if let cached = cachedImage(at: index) {
+            completion(index, cached)
+            return nil
+        }
+        let flag = CancelFlag()
+        work.async { [weak self] in
+            guard let self, !flag.isCancelled else { return }
+            // Re-check the cache now that we're on the decode queue: a page turn issues two
+            // requests for the same uncached page (prefetchItemsAt + the cell's own configure)
+            // back to back, and the first has cached it by the time the second runs on this
+            // serial queue — so decode it once, not twice.
+            if let cached = self.cachedImage(at: index) {
+                DispatchQueue.main.async { completion(index, cached) }
+                return
+            }
+            let image = self.render(index: index)
+            if let image { self.cache.setObject(CGImageBox(image), forKey: NSNumber(value: index)) }
+            DispatchQueue.main.async { completion(index, image) }
+        }
+        return flag
+    }
+
+    /// The controller reports the page the reader is on, so a superseded prefetch can bail
+    /// before its render (see `activePage`). Call whenever `currentPage` changes.
+    func setActivePage(_ index: Int) {
+        activePageLock.lock(); activePage = index; activePageLock.unlock()
+    }
+
+    /// Prefetch reaches ±2; a prefetch is only dropped once the reader is MORE than this far
+    /// past it, so nothing in the normal window is ever skipped.
+    private static let prefetchSkipRadius = 3
+
+    private func isNearActive(_ index: Int) -> Bool {
+        activePageLock.lock(); let a = activePage; activePageLock.unlock()
+        return abs(index - a) <= Self.prefetchSkipRadius
+    }
+
+    func prefetch(around index: Int) {
+        // Keep the neighbours ±2 decoded so page turns don't visibly fade in.
+        for i in [index + 1, index - 1, index + 2, index - 2]
+        where (0..<pageCount).contains(i) && cachedImage(at: i) == nil {
+            prefetchImage(at: i)
+        }
+    }
+
+    /// A neighbour warm-up. Unlike `requestImage` (which always renders, since it feeds the page
+    /// on screen), a prefetch that has been overtaken skips its render: on the serial decode
+    /// queue a stale prefetch would otherwise delay the page you're turning to, which is what
+    /// makes fast scrolling with the paper effect lag.
+    func prefetchImage(at index: Int) {
+        guard (0..<pageCount).contains(index), cachedImage(at: index) == nil else { return }
+        work.async { [weak self] in
+            guard let self, self.isNearActive(index), self.cachedImage(at: index) == nil else { return }
+            if let image = self.render(index: index) {
+                self.cache.setObject(CGImageBox(image), forKey: NSNumber(value: index))
+            }
+        }
+    }
+
+    // MARK: Page shapes (portrait strip)
+
+    /// Page shapes read so far, kept for the whole reader session: the strip is rebuilt on every
+    /// rotation back to portrait, and it should find them all known at once rather than scan the
+    /// archive again and re-lay itself out as they trickle back in.
+    private let aspectLock = NSLock()
+    private var aspectCache: [Int: CGFloat] = [:]
+
+    /// The page shapes already known, for a strip to lay itself out with from the start.
+    func knownAspects() -> [Int: CGFloat] {
+        aspectLock.lock(); defer { aspectLock.unlock() }
+        return aspectCache
+    }
+
+    /// Reads every page's shape not known yet from its image header (see
+    /// `ComicArchive.pageAspect`), nearest `start` first, and hands them over in small batches on
+    /// the main queue. A page whose header can't be read is left out; the strip shapes it from
+    /// its decoded image instead.
+    ///
+    /// Batched on the serial decode queue rather than done in one go, so a page the reader asks
+    /// for meanwhile waits behind at most one batch, not behind the whole comic.
+    func scanAspects(from start: Int, onBatch: @escaping @MainActor ([Int: CGFloat]) -> Void) {
+        guard pageCount > 0 else { return }
+        let known = knownAspects()
+        let first = min(max(start, 0), pageCount - 1)
+        var order = [first]
+        for d in 1..<pageCount {
+            if first + d < pageCount { order.append(first + d) }
+            if first - d >= 0 { order.append(first - d) }
+        }
+        scanAspects(order.filter { known[$0] == nil }[...], onBatch: onBatch)
+    }
+
+    private static let aspectBatch = 8
+
+    private func scanAspects(_ remaining: ArraySlice<Int>, onBatch: @escaping @MainActor ([Int: CGFloat]) -> Void) {
+        guard !remaining.isEmpty else { return }
+        work.async { [weak self] in
+            guard let self, let archive = self.archive else { return }
+            var found: [Int: CGFloat] = [:]
+            for page in remaining.prefix(Self.aspectBatch) {
+                if let aspect = archive.pageAspect(at: page) { found[page] = aspect }
+            }
+            if !found.isEmpty {
+                self.aspectLock.lock()
+                self.aspectCache.merge(found) { old, _ in old }
+                self.aspectLock.unlock()
+                DispatchQueue.main.async { MainActor.assumeIsolated { onBatch(found) } }
+            }
+            self.scanAspects(remaining.dropFirst(Self.aspectBatch), onBatch: onBatch)
+        }
+    }
+
+    /// Rebuilds cached images with a new paper setting.
+    func setPaper(enabled: Bool, params: PaperParams) {
+        // Clear the display cache synchronously: the reload that follows (paperVersion →
+        // reloadCurrent) reads the cache on the main thread, and an async clear could run
+        // *after* it, leaving the visible page rendered with the previous paper setting.
+        // NSCache is thread-safe; the params are still set on the work queue where render()
+        // reads them, and this call is enqueued before any reload's render, so re-decodes
+        // pick up the new params.
+        cache.removeAllObjects()
+        paperGeneration += 1
+        work.async { [weak self] in
+            self?.paperEnabled = enabled
+            self?.paperParams = params
+            // Clear again here on the work queue: a decode requested before this call renders
+            // with the OLD paper setting, and its setObject can land *after* the synchronous
+            // clear above — re-inserting a stale page that then persists until NSCache evicts it.
+            // Every such decode is enqueued before this block (serial queue), so this wipes
+            // exactly those stale writes; pages decoded afterwards use the params just set.
+            self?.cache.removeAllObjects()
+        }
+    }
+
+    private func render(index: Int) -> CGImage? {
+        guard archive != nil else { return nil }
+        activePageLock.lock(); let failed = failedPages.contains(index); activePageLock.unlock()
+        if failed { return Self.unreadablePage }
+        guard let data = archive?.pageData(at: index),
+              var image = ImageDownsampler.downsample(data, maxPixel: Self.displayMaxPixel) else {
+            activePageLock.lock(); failedPages.insert(index); activePageLock.unlock()
+            return Self.unreadablePage
+        }
+        if paperEnabled {
+            image = PaperFilter.shared.makeCGImage(from: image, params: paperParams) ?? image
+        }
+        return image
+    }
+
+    /// Stands in for a page that can't be decoded, so the reader shows a page saying so rather than
+    /// an empty slot: a plain sheet in the shape of a typical comic page with a warning sign and
+    /// a line of text. Drawn once, on first use.
+    static let unreadablePage: CGImage = {
+        // Mac port: drawn with AppKit into a bitmap rather than UIGraphicsImageRenderer.
+        let size = NSSize(width: 1000, height: 1500)
+        let image = NSImage(size: size, flipped: true) { bounds in
+            NSColor(white: 0.88, alpha: 1).setFill()
+            bounds.fill()
+            let ink = NSColor(white: 0.42, alpha: 1)
+            let config = NSImage.SymbolConfiguration(pointSize: 180, weight: .regular)
+                .applying(.init(paletteColors: [ink]))
+            if let symbol = NSImage(systemSymbolName: "exclamationmark.triangle", accessibilityDescription: nil)?
+                .withSymbolConfiguration(config) {
+                symbol.draw(in: NSRect(x: (size.width - symbol.size.width) / 2,
+                                       y: size.height / 2 - symbol.size.height - 40,
+                                       width: symbol.size.width, height: symbol.size.height),
+                            from: .zero, operation: .sourceOver, fraction: 1,
+                            respectFlipped: true, hints: nil)
+            }
+            let paragraph = NSMutableParagraphStyle()
+            paragraph.alignment = .center
+            let text = String(localized: "This page can't be displayed.")
+            (text as NSString).draw(in: NSRect(x: 80, y: size.height / 2 + 10, width: size.width - 160, height: 200),
+                                    withAttributes: [.font: NSFont.systemFont(ofSize: 52, weight: .semibold),
+                                                     .foregroundColor: ink,
+                                                     .paragraphStyle: paragraph])
+            return true
+        }
+        var rect = NSRect(origin: .zero, size: size)
+        return image.cgImage(forProposedRect: &rect, context: nil, hints: nil)!
+    }()
+
+    // MARK: Thumbnails (no paper — for the page grid / bookmarks)
+
+    /// A page thumbnail for the page grid (small) or a bookmark shot (full size). Checked in
+    /// order: in-memory cache → on-disk cache (small thumbnails only) → decode from archive.
+    /// Small thumbnails are persisted to `Storage.pageThumbs` so reopening the grid doesn't
+    /// re-extract and re-downsample every page. Honours task cancellation, so fast grid
+    /// scrolling doesn't backlog the decode queue with pages already scrolled past.
+    func thumbnail(at index: Int, maxPixel: CGFloat = PageImageStore.gridThumbPixelSizes[0]) async -> CGImage? {
+        // Kept as a String (Sendable) so the decode closure below doesn't capture an NSString.
+        let key = "\(index)#\(Int(maxPixel))"
+        if let cached = thumbCache.object(forKey: key as NSString)?.image { return cached }
+        // Only the small, oft-revisited grid thumbnails are worth a disk cache; a bookmark's
+        // one-off full-size shot isn't.
+        let persist = maxPixel <= Self.gridThumbPixelSizes.last!
+        let flag = CancelFlag()
+        return await withTaskCancellationHandler {
+            await withCheckedContinuation { (continuation: CheckedContinuation<CGImage?, Never>) in
+                work.async { [weak self] in
+                    guard let self, !flag.isCancelled else { return continuation.resume(returning: nil) }
+                    if persist, let disk = self.diskThumb(index: index, maxPixel: maxPixel) {
+                        self.thumbCache.setObject(CGImageBox(disk), forKey: key as NSString, cost: Self.cost(of: disk))
+                        return continuation.resume(returning: disk)
+                    }
+                    let image = (self.archive?.pageData(at: index))
+                        .flatMap { ImageDownsampler.downsample($0, maxPixel: maxPixel) }
+                    if let image {
+                        self.thumbCache.setObject(CGImageBox(image), forKey: key as NSString, cost: Self.cost(of: image))
+                        if persist { ImageDownsampler.writeJPEG(image, to: self.thumbDiskURL(index: index, maxPixel: maxPixel)) }
+                    }
+                    // A page that won't decode still gets a picture (never cached or written to
+                    // disk), so the page grid shows the gap and a bookmark on it still saves.
+                    continuation.resume(returning: image ?? (self.archive != nil ? Self.unreadablePage : nil))
+                }
+            }
+        } onCancel: {
+            flag.cancel()
+        }
+    }
+
+    private func thumbDiskURL(index: Int, maxPixel: CGFloat) -> URL {
+        Storage.pageThumbs(for: bookID).appendingPathComponent("\(index)@\(Int(maxPixel)).jpg")
+    }
+
+    /// Decoded here on the work queue (ImageIO with cache-immediately), not lazily on the main
+    /// thread at first draw, which `UIImage(data:)` would leave to a fast-flung grid.
+    private func diskThumb(index: Int, maxPixel: CGFloat) -> CGImage? {
+        ImageDownsampler.downsample(url: thumbDiskURL(index: index, maxPixel: maxPixel), maxPixel: maxPixel)
+    }
+
+    /// The few sizes (device pixels, longest side) a page-grid thumbnail is decoded at. A fixed
+    /// ladder rather than the exact cell size keeps the on-disk cache keys stable across devices
+    /// and rotations.
+    static let gridThumbPixelSizes: [CGFloat] = [320, 480]
+
+    /// The smallest grid thumbnail size that covers a cell `pointHeight` tall at `scale`, or the
+    /// largest one for anything bigger.
+    static func gridThumbPixel(forPointHeight pointHeight: CGFloat, scale: CGFloat) -> CGFloat {
+        let needed = pointHeight * scale
+        return gridThumbPixelSizes.first { $0 >= needed } ?? gridThumbPixelSizes.last!
+    }
+
+    /// Approximate decoded size in bytes (4 per device pixel), for the thumbnail cost limit.
+    private static func cost(of image: CGImage) -> Int {
+        image.width * image.height * 4
+    }
+}
+
+/// Thread-safe cancellation flag: set from a task-cancellation handler or a reused cell, read on
+/// the decode queue so a superseded request skips its decode. Unchecked because the lock is the
+/// synchronisation.
+final class CancelFlag: @unchecked Sendable {
+    private let lock = NSLock()
+    private var cancelled = false
+    var isCancelled: Bool { lock.lock(); defer { lock.unlock() }; return cancelled }
+    func cancel() { lock.lock(); cancelled = true; lock.unlock() }
+}
+
+/// NSCache wants class values; a CGImage is a CF type, so it travels in this box.
+final class CGImageBox: @unchecked Sendable {
+    let image: CGImage
+    init(_ image: CGImage) { self.image = image }
+}

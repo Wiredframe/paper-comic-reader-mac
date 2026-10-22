@@ -1,0 +1,289 @@
+//
+//  ComicBook.swift
+//  Comic Reader
+//
+//  SwiftData model for one imported comic. Only metadata lives here; the archive
+//  bytes and images are files on disk (see Storage).
+//
+
+import Foundation
+import SwiftData
+
+@Model
+final class ComicBook {
+
+    @Attribute(.unique) var id: UUID
+    var title: String
+    var fileName: String        // archive file in Storage.comics
+    var pageCount: Int
+    var dateAdded: Date
+    var dateOpened: Date?       // last time it was opened — drives the Recents tab
+    var lastReadPage: Int       // 0-based, for resume
+    var coverName: String?      // cover file in Storage.covers
+    var isRead: Bool = false     // user-set "read" flag; independent of bookmarks. Set
+                                 // manually from the cover menu, or automatically once
+                                 // the reader reaches the last page. Default via the
+                                 // property initializer keeps SwiftData migration additive.
+    var isFavorite: Bool = false // user-set "favorite" flag, the counterpart to `isRead`: that one
+                                 // records what you've finished, this one what you want back. Set
+                                 // only by hand, from a cover's long-press menu or the carousel's
+                                 // overflow — nothing about reading ever sets it, which is why it
+                                 // survives everything a reading session does. Defaulted, so
+                                 // migration stays additive.
+    var openCount: Int = 0       // how often the comic was opened — read as "popularity"
+                                 // by the library sort and the Discover modes. Monotonic:
+                                 // deliberately NOT cleared by Recents' "Clear", which only
+                                 // forgets `dateOpened`. Defaulted, so migration stays additive.
+    var coverAspect: Double?     // cover width / height, captured at import. Stored because
+                                 // DiskImage fills whatever frame it's given and can't report
+                                 // the artwork's shape — Discover needs it to size a card that
+                                 // doesn't crop. Optional, so migration stays additive.
+
+    // MARK: ComicInfo.xml
+    //
+    // Read from the archive at import (see ComicInfoParser) and stored here so no view has to
+    // touch the archive to describe a comic — that's what lets the grid, the list, Discover and
+    // the detail sheet all render metadata at their own level of detail. Every field is
+    // optional and `stories` defaults, so a store written before this existed migrates without
+    // a mapping model. Comics imported earlier are filled in by `Importer.backfillMetadata`.
+
+    var series: String?          // "Topolino"
+    var issueNumber: String?     // "1900" — a String, not an Int: issues are numbered "1900",
+                                 // but also "Annual 2", "3.5" and "½".
+    var issueTitle: String?      // <Title> — usually the lead story, NOT the file name
+    var summary: String?         // <Summary> raw. Kept even when `stories` parsed out of it:
+                                 // it's the fallback whenever the index format doesn't match.
+    var publisher: String?
+    var year: Int?
+    var month: Int?
+    var day: Int?
+    var writers: String?         // <Writer>/<Penciller>/<Inker>: already comma-joined by the
+    var pencillers: String?      // tagger. Shown only when there's no story list — with one,
+    var inkers: String?          // the per-story credits say the same thing, but attributed.
+    var characters: String?
+    var languageISO: String?
+    var webURL: String?
+    var notes: String?           // provenance, e.g. "Metadati da I.N.D.U.C.K.S. …"
+
+    /// The issue's index — the stories, covers and text pieces inside it. A Codable value
+    /// type rather than a related @Model: nothing queries a story on its own, and keeping it
+    /// an attribute means adding metadata doesn't add an entity to the schema.
+    var stories: [ComicStory] = []
+
+    /// Whether the archive's ComicInfo.xml has been looked for. Distinguishes "untagged" from
+    /// "not read yet", which no combination of the fields above can: both look like all-nil.
+    /// Defaults false, so comics imported before this feature get read exactly once, on the
+    /// next launch (see `Importer.backfillMetadata`) — and an untagged comic isn't reopened on
+    /// every launch to find nothing again. Defaulted, so migration stays additive.
+    var metadataScanned: Bool = false
+
+    /// Where this comic's bytes come from, for a comic imported by scanning a library folder
+    /// (see LibrarySource) rather than copied in from a single import. It's the file's path
+    /// relative to the folder root — "Topolino/1900.cbz" — the stable identity that survives the
+    /// folder being re-pointed to a new mount, and re-links every entry at once. Nil means an
+    /// "owned copy": imported straight in (picker / Files / share sheet), its archive always local
+    /// and with nowhere to re-fetch from. Optional with no initializer, so a store written before
+    /// this feature migrates additively (every existing comic reads back as nil = owned copy).
+    var sourceRelativePath: String?
+
+    /// Whether the archive bytes are on disk right now. Stored rather than derived from a stat so
+    /// SwiftUI actually re-renders the availability badge when a download or eviction flips it —
+    /// a computed `fileExists` would change without notifying any view. Set false only for a
+    /// folder-backed comic not yet downloaded; owned copies and every comic migrated from before
+    /// this feature default true, their archive always present. The reader still checks the file
+    /// system itself before opening and reconciles this flag if the two ever disagree.
+    var hasLocalArchive: Bool = true
+
+    @Relationship(deleteRule: .cascade, inverse: \Bookmark.book)
+    var bookmarks: [Bookmark] = []
+
+    init(id: UUID = UUID(),
+         title: String,
+         fileName: String,
+         pageCount: Int,
+         coverName: String?,
+         coverAspect: Double? = nil) {
+        self.id = id
+        self.title = title
+        self.fileName = fileName
+        self.pageCount = pageCount
+        self.dateAdded = .now
+        self.dateOpened = nil
+        self.lastReadPage = 0
+        self.coverName = coverName
+        self.coverAspect = coverAspect
+    }
+
+    var archiveURL: URL { Storage.comicURL(fileName) }
+    var coverURL: URL? { coverName.map(Storage.coverURL) }
+
+    // MARK: Local availability
+    //
+    // A folder-backed comic (see `sourceRelativePath`) carries its cover and metadata locally but
+    // fetches its archive on demand, so "is it downloaded?" is a real, changing state the grid
+    // badge and the reader both read. An owned copy has no source to fetch from — its archive is
+    // simply always present, so `isRemote` never fires for it.
+
+    /// Whether this comic was brought in by a library-folder scan (vs. copied straight in).
+    var isFolderBacked: Bool { sourceRelativePath != nil }
+
+    /// A folder-backed comic whose bytes aren't local yet — what the availability badge marks and
+    /// what the reader downloads on open. Owned copies are never remote.
+    var isRemote: Bool { isFolderBacked && !hasLocalArchive }
+
+    /// Forgets how often this comic was opened, putting it back to "Never opened".
+    ///
+    /// `openCount` is otherwise monotonic — deliberately not cleared by Recents' "Clear", which
+    /// only forgets `dateOpened` — because the Discover modes read it as popularity and a counter
+    /// that quietly resets makes those modes lie. This is the one way to clear it, and it is a
+    /// deliberate per-comic act: it leaves `dateOpened`, the reading progress and everything else
+    /// exactly where they were, so a comic dropped out of "Popular" still sits in Recents where
+    /// the reader left it.
+    func resetOpenCount() {
+        openCount = 0
+    }
+
+    /// Copies parsed ComicInfo.xml values onto the book. A nil `info` (untagged comic, or one
+    /// whose XML holds nothing useful) clears the fields rather than leaving stale ones behind,
+    /// so re-reading an archive whose metadata was stripped does the right thing.
+    func apply(_ info: ComicInfoData?) {
+        metadataScanned = true
+        series = info?.series
+        issueNumber = info?.number
+        issueTitle = info?.title
+        summary = info?.summary
+        publisher = info?.publisher
+        year = info?.year
+        month = info?.month
+        day = info?.day
+        writers = info?.writer
+        pencillers = info?.penciller
+        inkers = info?.inker
+        characters = info?.characters
+        languageISO = info?.languageISO
+        webURL = info?.web
+        notes = info?.notes
+        stories = info?.stories ?? []
+    }
+
+    // MARK: Display
+    //
+    // Every view names a comic through these rather than through `title`, so metadata reaches
+    // the grid, the list, Discover and the reader without any of them knowing about ComicInfo.
+    // `title` stays the imported file name: it's the archive's identity, it's what the user
+    // sees in Files, and it's all a comic without metadata has.
+
+    /// What to call this comic: "Topolino 1900" once it carries metadata, the file name
+    /// otherwise.
+    var displayTitle: String {
+        guard let series = series?.nonEmpty else { return title }
+        guard let issueNumber = issueNumber?.nonEmpty else { return series }
+        return "\(series) \(issueNumber)"
+    }
+
+    /// The line under the title — the issue's own title. Nil when there's nothing to add:
+    /// no metadata, or it would only repeat what `displayTitle` already says.
+    var displaySubtitle: String? {
+        guard let issueTitle = issueTitle?.nonEmpty, issueTitle != displayTitle else { return nil }
+        return issueTitle
+    }
+
+    /// Whether this comic has anything to fill a detail view with.
+    var hasMetadata: Bool {
+        !stories.isEmpty || summary?.nonEmpty != nil || series?.nonEmpty != nil
+            || publisher?.nonEmpty != nil || characters?.nonEmpty != nil || year != nil
+    }
+
+    /// "26 April 1992" / "April 1992" / "1992" — as much of the cover date as the tagger gave
+    /// us, in the reader's locale. Out-of-range values are treated as absent rather than
+    /// trusted: the date is decoration, and a tagger's "Month 13" shouldn't render as garbage.
+    var dateLabel: String? {
+        guard let year, (1...9999).contains(year) else { return nil }
+        guard let month, (1...12).contains(month) else { return String(year) }
+        var components = DateComponents(year: year, month: month)
+        if let day, (1...31).contains(day) { components.day = day }
+        guard let date = Calendar.current.date(from: components) else { return String(year) }
+        return components.day == nil
+            ? date.formatted(.dateTime.month(.wide).year())
+            : date.formatted(.dateTime.day().month(.wide).year())
+    }
+
+    /// "6 stories": how many entries the index holds, covers and text pieces included. The kind
+    /// is the tagger's own word in the tagger's language (see `ComicStory.kind`), so there is no
+    /// reliable way to tell a cover from a story, and the count matches the rows listed under it.
+    /// Nil when there's no index.
+    var storyCountLabel: String? {
+        guard !stories.isEmpty else { return nil }
+        let n = stories.count
+        return String(localized: "\(n) stories")
+    }
+
+    /// Series first, then issue number the way a human reads it ("Topolino 2" before
+    /// "Topolino 10"). Comics without a series sort by file name, after the ones with.
+    func sortsBefore(_ other: ComicBook) -> Bool {
+        let lhs = series?.nonEmpty, rhs = other.series?.nonEmpty
+        switch (lhs, rhs) {
+        case let (l?, r?) where l.localizedStandardCompare(r) != .orderedSame:
+            return l.localizedStandardCompare(r) == .orderedAscending
+        case (nil, _?): return false      // unfiled comics go last
+        case (_?, nil): return true
+        default: break                    // same series, or both unfiled
+        }
+        let lhsNumber = issueNumber?.nonEmpty ?? title
+        let rhsNumber = other.issueNumber?.nonEmpty ?? other.title
+        return lhsNumber.localizedStandardCompare(rhsNumber) == .orderedAscending
+    }
+
+    // MARK: Search
+
+    /// Whether this comic matches a library search `query`, compared case- AND
+    /// diacritic-insensitively (so "asterix" finds "Astérix", "topolino" finds "Topolino").
+    /// Searches what a reader would name a comic by: its display title and file name, its series,
+    /// issue number and issue title, the characters listed in it, and every story title in the
+    /// index (unless `includingStories` is false, see `Bookmark.matches`). A blank query matches
+    /// everything, so callers can bind it straight to a search field without a guard.
+    func matches(searchQuery query: String, includingStories: Bool = true) -> Bool {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return true }
+        func has(_ field: String?) -> Bool {
+            guard let field else { return false }
+            return field.range(of: trimmed, options: [.caseInsensitive, .diacriticInsensitive]) != nil
+        }
+        if has(displayTitle) || has(title) || has(series) || has(issueNumber)
+            || has(issueTitle) || has(characters) {
+            return true
+        }
+        return includingStories && stories.contains { has($0.title) }
+    }
+
+    /// Story names this comic's bookmarks carry that aren't rows of its index: the ones typed by
+    /// hand in the story picker, in page order and each once, so the picker can offer them again.
+    var customStoryTitles: [String] {
+        var seen: Set<String> = []
+        return bookmarks
+            .sorted { $0.pageIndex < $1.pageIndex }
+            .compactMap { mark -> String? in
+                guard let title = mark.storyLabel, mark.resolvedStoryIndex() == nil,
+                      seen.insert(title).inserted else { return nil }
+                return title
+            }
+    }
+
+    /// 0…1 read progress for the cover pie.
+    var progress: Double {
+        guard pageCount > 1 else { return lastReadPage > 0 ? 1 : 0 }
+        return min(1, max(0, Double(lastReadPage) / Double(pageCount - 1)))
+    }
+
+    /// "12 pages" / "1 page" — inflected for the cover and list captions.
+    var pageCountLabel: String { String(localized: "\(pageCount) pages") }
+
+    /// "Opened 7 times" / "Opened once" / "Never opened" — for the Discover info panel.
+    var openCountLabel: String {
+        switch openCount {
+        case 0:  return String(localized: "Never opened")
+        case 1:  return String(localized: "Opened once")
+        default: return String(localized: "Opened \(openCount) times")
+        }
+    }
+}
