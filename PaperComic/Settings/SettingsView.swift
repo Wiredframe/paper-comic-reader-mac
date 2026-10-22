@@ -101,6 +101,7 @@ private struct ReadingSettings: View {
 					Text("Whole page").tag(ReaderSettings.Fit.page)
 					Text("Window width").tag(ReaderSettings.Fit.width)
 				}
+				Toggle("Fit the window to the pages (full screen height)", isOn: $reader.fitWindow)
 			}
 			Section {
 				Toggle("Click the left or right edge to turn pages", isOn: $reader.clickToTurn)

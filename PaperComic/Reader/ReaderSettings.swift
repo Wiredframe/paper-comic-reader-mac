@@ -21,6 +21,9 @@ final class ReaderSettings {
 	var fit: Fit { didSet { defaults.set(fit.rawValue, forKey: K.fit) } }
 	/// Text on a page can be selected and looked up (VisionKit Live Text).
 	var liveText: Bool { didSet { defaults.set(liveText, forKey: K.liveText) } }
+	/// The window takes the full screen height and the width of the page or spread, as Simple
+	/// Comic's did, so no margin is left beside the pages. Only while fitting the whole page.
+	var fitWindow: Bool { didSet { defaults.set(fitWindow, forKey: K.fitWindow) } }
 	/// A click on the left or right third of the page turns it.
 	var clickToTurn: Bool { didSet { defaults.set(clickToTurn, forKey: K.clickToTurn) } }
 
@@ -38,6 +41,7 @@ final class ReaderSettings {
 		static let fit = "reader.fit"
 		static let liveText = "reader.liveText"
 		static let clickToTurn = "reader.clickToTurn"
+		static let fitWindow = "reader.fitWindow"
 	}
 
 	init(defaults: UserDefaults = .standard) {
@@ -47,5 +51,6 @@ final class ReaderSettings {
 		fit = Fit(rawValue: defaults.string(forKey: K.fit) ?? "") ?? .page
 		liveText = defaults.object(forKey: K.liveText) as? Bool ?? true
 		clickToTurn = defaults.object(forKey: K.clickToTurn) as? Bool ?? true
+		fitWindow = defaults.object(forKey: K.fitWindow) as? Bool ?? true
 	}
 }

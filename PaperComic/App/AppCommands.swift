@@ -39,6 +39,7 @@ struct AppCommands: Commands {
 				Text("Fit Width").tag(ReaderSettings.Fit.width)
 			}
 			.pickerStyle(.inline)
+			Toggle("Fit Window to Pages", isOn: binding(\.fitWindow))
 			Divider()
 			Button("Zoom In") { NSApp.sendAction(#selector(PageCanvasView.zoomIn(_:)), to: nil, from: nil) }
 				.keyboardShortcut("+")

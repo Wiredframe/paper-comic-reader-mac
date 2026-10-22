@@ -72,7 +72,8 @@ struct ReaderView: View {
 												  fit: settings.fit,
 												  rightToLeft: settings.rightToLeft,
 												  liveText: settings.liveText,
-												  clickToTurn: settings.clickToTurn),
+												  clickToTurn: settings.clickToTurn,
+												  fitWindow: settings.fitWindow),
 						   actions: PageCanvasActions(forward: { session.next() },
 													  backward: { session.previous() },
 													  first: { session.first() },
@@ -168,6 +169,8 @@ struct ReaderView: View {
 					Text("Fit Width").tag(ReaderSettings.Fit.width)
 				}
 				.pickerStyle(.inline)
+				Divider()
+				Toggle("Fit Window to Pages", isOn: Binding(get: { settings.fitWindow }, set: { settings.fitWindow = $0 }))
 				Divider()
 				Toggle("Live Text", isOn: Binding(get: { settings.liveText }, set: { settings.liveText = $0 }))
 				Toggle("Click to Turn Pages", isOn: Binding(get: { settings.clickToTurn }, set: { settings.clickToTurn = $0 }))

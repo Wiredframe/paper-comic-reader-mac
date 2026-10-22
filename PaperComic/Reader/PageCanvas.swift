@@ -28,6 +28,7 @@ struct PageCanvasState: Equatable {
 	var rightToLeft: Bool
 	var liveText: Bool
 	var clickToTurn: Bool
+	var fitWindow: Bool
 }
 
 /// The reader's moves, as the canvas asks for them. Directions are already in reading order:
@@ -110,6 +111,7 @@ final class PageCanvasView: NSView {
 	func tearDown() {
 		requests.forEach { $0.cancel() }
 		requests = []
+		restoreWindowFrame()
 	}
 
 	// MARK: State
@@ -121,7 +123,8 @@ final class PageCanvasView: NSView {
 		if pagesChanged || old?.rightToLeft != new.rightToLeft {
 			showPages(new.pages, rightToLeft: new.rightToLeft, keepImages: old?.pages == new.pages)
 		}
-		if pagesChanged || old?.fit != new.fit {
+		if old?.fitWindow == true, !new.fitWindow { restoreWindowFrame() }
+		if pagesChanged || old?.fit != new.fit || old?.fitWindow != new.fitWindow {
 			// A new page starts at its top, unzoomed: carrying a zoom across a turn lands the
 			// reader in the middle of a page they haven't seen yet.
 			scrollView.magnification = 1
@@ -209,6 +212,59 @@ final class PageCanvasView: NSView {
 			x += width
 		}
 		spread.frame = NSRect(x: 0, y: 0, width: x, height: height.rounded())
+		// After this layout pass, not inside it: resizing the window lays the canvas out again.
+		pendingUnitWidth = unitWidth
+		if !fitScheduled {
+			fitScheduled = true
+			DispatchQueue.main.async { [weak self] in
+				guard let self else { return }
+				self.fitScheduled = false
+				self.fitWindowToSpread(unitWidth: self.pendingUnitWidth)
+			}
+		}
+	}
+
+	private var pendingUnitWidth: CGFloat = 0
+	private var fitScheduled = false
+	/// Kept from the moment the canvas joins a window, because by the time SwiftUI dismantles
+	/// it the view may already have left the window whose frame has to be given back.
+	private weak var hostWindow: NSWindow?
+
+	// MARK: Window fitted to the pages
+
+	/// The window's frame before the reader first fitted it, given back when the reader leaves.
+	private var savedWindowFrame: NSRect?
+
+	/// Makes the window the full height of the screen and exactly as wide as the spread at that
+	/// height, keeping its left edge where it is (moved left only if it would run off the screen).
+	/// The same rule Simple Comic used. Not in full screen, and not while fitting the width, where
+	/// the window's width is the reader's choice.
+	private func fitWindowToSpread(unitWidth: CGFloat) {
+		guard let state, state.fitWindow, state.fit == .page, unitWidth > 0,
+			  let window = hostWindow, let screen = window.screen ?? NSScreen.main,
+			  !window.styleMask.contains(.fullScreen), window.inLiveResize == false else { return }
+		let visible = screen.visibleFrame
+		let chromeHeight = window.frame.height - window.contentLayoutRect.height
+		let chromeWidth = window.frame.width - window.contentLayoutRect.width
+		let contentHeight = visible.height - chromeHeight
+		guard contentHeight > 100 else { return }
+		var width = (contentHeight * unitWidth).rounded() + chromeWidth
+		width = min(max(width, window.minSize.width), visible.width)
+		var x = window.frame.minX
+		if x + width > visible.maxX { x = visible.maxX - width }
+		x = max(x, visible.minX)
+		let target = NSRect(x: x, y: visible.minY, width: width, height: visible.height)
+		guard abs(target.width - window.frame.width) > 1 || abs(target.height - window.frame.height) > 1
+				|| abs(target.minX - window.frame.minX) > 1 || abs(target.minY - window.frame.minY) > 1 else { return }
+		if savedWindowFrame == nil { savedWindowFrame = window.frame }
+		window.setFrame(target, display: true, animate: false)
+	}
+
+	private func restoreWindowFrame() {
+		guard let frame = savedWindowFrame, let window = hostWindow else { return }
+		savedWindowFrame = nil
+		guard !window.styleMask.contains(.fullScreen) else { return }
+		window.setFrame(frame, display: true, animate: false)
 	}
 
 	private func scrollToTop() {
@@ -223,6 +279,7 @@ final class PageCanvasView: NSView {
 
 	override func viewDidMoveToWindow() {
 		super.viewDidMoveToWindow()
+		if let window { hostWindow = window }
 		window?.makeFirstResponder(self)
 	}
 
