@@ -80,6 +80,7 @@ struct RootView: View {
 			model.openWindow = { openWindow(id: "main") }
 		}
 		#if DEBUG
+		snapshotIfAsked()
 		// Development only: `-debugOpenComic <uuid>` opens a comic at launch, so the reader can
 		// be checked from a script without clicking.
 		if let id = UserDefaults.standard.string(forKey: "debugOpenComic").flatMap(UUID.init),
@@ -90,6 +91,23 @@ struct RootView: View {
 		#endif
 		takePending()
 	}
+
+	#if DEBUG
+	/// Development only: `-debugSnapshot <name>` writes the window's content as a PNG into the
+	/// container's temporary folder a few seconds after launch, for checking the UI from a script
+	/// even while the screen is locked.
+	private func snapshotIfAsked() {
+		guard let name = UserDefaults.standard.string(forKey: "debugSnapshot") else { return }
+		DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
+			guard let view = window?.contentView,
+				  let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return }
+			view.cacheDisplay(in: view.bounds, to: rep)
+			let url = FileManager.default.temporaryDirectory.appendingPathComponent("\(name).png")
+			try? rep.representation(using: .png, properties: [:])?.write(to: url)
+			NSLog("PaperComic snapshot: %@", url.path)
+		}
+	}
+	#endif
 
 	private func takePending() {
 		guard !model.pendingOpen.isEmpty else { return }

@@ -76,6 +76,8 @@ struct LibraryView: View {
 
 	@State private var search = ""
 	@State private var selection: UUID?
+	@State private var bookmarkSelection: UUID?
+	@Query private var allBookmarks: [Bookmark]
 	@State private var hovered: UUID?
 	@State private var pendingDeletion: ComicBook?
 	@FocusState private var gridFocused: Bool
@@ -87,7 +89,7 @@ struct LibraryView: View {
 		VStack(spacing: 0) {
 			switch scope {
 			case .comics: comics
-			case .bookmarks: BookmarksView(search: search, onOpen: onOpen)
+			case .bookmarks: BookmarksView(search: search, selection: $bookmarkSelection, onOpen: onOpen)
 			}
 			if model.job != nil || model.downloads.hasTickets || model.skippedCount > 0 {
 				Divider()
@@ -98,9 +100,18 @@ struct LibraryView: View {
 		.toolbar { toolbar }
 		.navigationTitle("Library")
 		.navigationSubtitle(subtitle)
-		.inspector(isPresented: Binding(get: { showsDetails && scope == .comics }, set: { showsDetails = $0 })) {
-			ComicDetailPane(book: selectedBook, onOpen: { onOpen($0, nil) })
-				.inspectorColumnWidth(min: 240, ideal: 280, max: 380)
+		.inspector(isPresented: $showsDetails) {
+			// For a bookmark, the comic it belongs to, opened on its page.
+			Group {
+				switch scope {
+				case .comics:
+					ComicDetailPane(book: selectedBook, onOpen: { onOpen($0, nil) })
+				case .bookmarks:
+					let mark = bookmarkSelection.flatMap { id in allBookmarks.first { $0.id == id } }
+					ComicDetailPane(book: mark?.book, onOpen: { onOpen($0, mark?.pageIndex) })
+				}
+			}
+			.inspectorColumnWidth(min: 240, ideal: 280, max: 380)
 		}
 		.confirmationDialog(deletionTitle, isPresented: Binding(get: { pendingDeletion != nil },
 																set: { if !$0 { pendingDeletion = nil } }),
@@ -221,6 +232,9 @@ struct LibraryView: View {
 		.focusEffectDisabled()
 		.focused($gridFocused)
 		.onAppear {
+			#if DEBUG
+			if let id = UserDefaults.standard.string(forKey: "debugSelectComic").flatMap(UUID.init) { selection = id }
+			#endif
 			// Once, when the library first shows: not every time a search brings the grid back,
 			// which would pull the focus out of the search field mid-word.
 			if !didFocusGrid {
@@ -328,12 +342,11 @@ struct LibraryView: View {
 				Slider(value: $columnWidth, in: LibraryMetrics.columnWidths)
 					.frame(width: 90)
 					.help("Cover size")
-
-				Button { showsDetails.toggle() } label: {
-					Label("Details", systemImage: "sidebar.right")
-				}
-				.help("Show or hide the details")
 			}
+			Button { showsDetails.toggle() } label: {
+				Label("Details", systemImage: "sidebar.right")
+			}
+			.help("Show or hide the details")
 		}
 	}
 }

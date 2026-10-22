@@ -403,6 +403,22 @@
         }
       }
     },
+    "About this comic": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Über diesen Comic"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Informazioni sul fumetto"
+          }
+        }
+      }
+    },
     "Actual Size": {
       "localizations": {
         "de": {
@@ -627,6 +643,22 @@
         }
       }
     },
+    "Bookmark a page": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lesezeichen für eine Seite"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Segnalibro per una pagina"
+          }
+        }
+      }
+    },
     "Bookmark a page while reading, and it shows up here.": {
       "localizations": {
         "de": {
@@ -687,6 +719,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Impossibile aprire il fumetto"
+          }
+        }
+      }
+    },
+    "Characters": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Figuren"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Personaggi"
           }
         }
       }
@@ -1491,6 +1539,22 @@
         }
       }
     },
+    "Info": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Info"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Info"
+          }
+        }
+      }
+    },
     "Inker": {
       "localizations": {
         "de": {
@@ -1503,6 +1567,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Chine"
+          }
+        }
+      }
+    },
+    "Issue": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ausgabe"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Numero"
           }
         }
       }
@@ -1551,6 +1631,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Layout"
+          }
+        }
+      }
+    },
+    "Left Page (%lld)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Linke Seite (%lld)"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pagina sinistra (%lld)"
           }
         }
       }
@@ -1695,6 +1791,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Metadati"
+          }
+        }
+      }
+    },
+    "More on the web": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mehr im Web"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Altro sul web"
           }
         }
       }
@@ -2401,6 +2513,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ripristina dalla copia di sicurezza"
+          }
+        }
+      }
+    },
+    "Right Page (%lld)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rechte Seite (%lld)"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pagina destra (%lld)"
           }
         }
       }

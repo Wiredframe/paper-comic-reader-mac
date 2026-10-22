@@ -283,15 +283,28 @@ final class ReaderSession {
 		book.bookmarks.contains { visiblePages.contains($0.pageIndex) }
 	}
 
-	/// Bookmarks the page on screen (the left one of two), or removes the bookmark there.
+	func isBookmarked(_ page: Int) -> Bool {
+		book.bookmarks.contains { $0.pageIndex == page }
+	}
+
+	/// The menu command and keyboard shortcut: the page the reader is at, or, when a bookmark is
+	/// already on screen, that one goes.
 	func toggleBookmark() {
 		if let existing = book.bookmarks.first(where: { visiblePages.contains($0.pageIndex) }) {
+			toggleBookmark(page: existing.pageIndex)
+		} else {
+			toggleBookmark(page: visiblePages.contains(anchorPage) ? anchorPage : currentPage)
+		}
+	}
+
+	/// Bookmarks one page, or removes its bookmark. Either page of a spread can be marked.
+	func toggleBookmark(page: Int) {
+		if let existing = book.bookmarks.first(where: { $0.pageIndex == page }) {
 			try? Storage.fm.removeItem(at: existing.thumbURL)
 			model.context.delete(existing)
 			try? model.context.save()
 			return
 		}
-		let page = visiblePages.contains(anchorPage) ? anchorPage : currentPage
 		guard let store, !bookmarking.contains(page) else { return }
 		bookmarking.insert(page)
 		Task {

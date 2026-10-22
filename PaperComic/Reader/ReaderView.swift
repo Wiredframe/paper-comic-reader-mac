@@ -15,7 +15,7 @@ struct ReaderView: View {
 	@Environment(AppModel.self) private var model
 	@State private var showsPageBar = false
 	@State private var showsPageGrid = false
-	@State private var scrubPage: Double = 0
+	@State private var showsInfo = false
 
 	private var settings: ReaderSettings { model.reader }
 
@@ -164,11 +164,18 @@ struct ReaderView: View {
 			.help("Back to the library")
 		}
 		ToolbarItemGroup(placement: .primaryAction) {
-			Button { session.toggleBookmark() } label: {
-				Label("Bookmark", systemImage: session.isCurrentPageBookmarked ? "bookmark.fill" : "bookmark")
+			bookmarkControl
+				.disabled(session.phase != .ready)
+
+			Button { showsInfo.toggle() } label: {
+				Label("Info", systemImage: "info.circle")
 			}
-			.help("Bookmark this page")
-			.disabled(session.phase != .ready)
+			.help("About this comic")
+			.popover(isPresented: $showsInfo, arrowEdge: .bottom) {
+				ComicInfoPanel(book: session.book)
+					.frame(width: 320)
+					.frame(maxHeight: 520)
+			}
 
 			Button { showsPageGrid = true } label: {
 				Label("Pages", systemImage: "square.grid.3x3")
@@ -199,6 +206,33 @@ struct ReaderView: View {
 				Label("Paper", systemImage: "doc.richtext")
 			}
 			.help("Paper effect")
+		}
+	}
+
+	/// One page on screen: a button. Two: a menu with a bookmark for each, in the order they
+	/// are shown, so the right page can be marked as well as the left.
+	@ViewBuilder
+	private var bookmarkControl: some View {
+		let pages = session.visiblePages
+		let icon = session.isCurrentPageBookmarked ? "bookmark.fill" : "bookmark"
+		if pages.count > 1 {
+			let shown = settings.rightToLeft ? Array(pages.reversed()) : pages
+			Menu {
+				ForEach(Array(shown.enumerated()), id: \.element) { index, page in
+					Toggle(isOn: Binding(get: { session.isBookmarked(page) },
+										 set: { _ in session.toggleBookmark(page: page) })) {
+						Text(index == 0 ? "Left Page (\(page + 1))" : "Right Page (\(page + 1))")
+					}
+				}
+			} label: {
+				Label("Bookmark", systemImage: icon)
+			}
+			.help("Bookmark a page")
+		} else {
+			Button { session.toggleBookmark() } label: {
+				Label("Bookmark", systemImage: icon)
+			}
+			.help("Bookmark this page")
 		}
 	}
 

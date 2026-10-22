@@ -490,7 +490,9 @@ private final class PageView: NSView {
 		if liveTextEnabled {
 			if overlay == nil {
 				let overlay = ImageAnalysisOverlayView()
-				overlay.preferredInteractionTypes = .automaticTextOnly
+				// Text selection explicitly: `.automaticTextOnly` leaves the selection view waiting for a
+				// Live Text button that is hidden here, so a drag across text did nothing.
+				overlay.preferredInteractionTypes = .textSelection
 				// Selecting text is enough; the Live Text button in the corner would sit on the art.
 				overlay.isSupplementaryInterfaceHidden = true
 				overlay.autoresizingMask = [.width, .height]
@@ -525,6 +527,7 @@ private final class PageView: NSView {
 			overlay.analysis = analysis
 		}
 	}
+
 
 	// Clicks pass through to the spread unless Live Text claims them for a selection.
 	override func hitTest(_ point: NSPoint) -> NSView? {
