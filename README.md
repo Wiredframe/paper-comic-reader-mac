@@ -75,7 +75,7 @@ brew install --cask paper-comic-reader
 Homebrew refuses casks from taps outside its own repositories until you say you trust them, and
 `brew trust` is that "yes", asked once per tap.
 
-Or download the `.zip` from [Releases](https://github.com/Wiredframe/Simple-Comic/releases) and move
+Or download the `.zip` from [Releases](https://github.com/Wiredframe/paper-comic-reader-mac/releases) and move
 `Paper Comic Reader.app` into `/Applications`.
 
 ### About Gatekeeper
@@ -98,8 +98,8 @@ Requires macOS 14 or later, Xcode 26 or newer, [XcodeGen](https://github.com/yon
 (`xcodebuild -downloadComponent MetalToolchain`).
 
 ```
-git clone https://github.com/Wiredframe/Simple-Comic.git
-cd Simple-Comic
+git clone https://github.com/Wiredframe/paper-comic-reader-mac.git
+cd paper-comic-reader-mac
 xcodegen generate
 xcodebuild -project PaperComicReader.xcodeproj -scheme "Paper Comic Reader" build
 ```

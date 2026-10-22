@@ -22,10 +22,10 @@ cask "paper-comic-reader" do
   version "3.0.0"
   sha256 "0000000000000000000000000000000000000000000000000000000000000000"
 
-  url "https://github.com/Wiredframe/Simple-Comic/releases/download/v#{version}/Paper-Comic-Reader-#{version}.zip"
+  url "https://github.com/Wiredframe/paper-comic-reader-mac/releases/download/v#{version}/Paper-Comic-Reader-#{version}.zip"
   name "Paper Comic Reader"
   desc "Comic reader with a paper effect and a library"
-  homepage "https://github.com/Wiredframe/Simple-Comic"
+  homepage "https://github.com/Wiredframe/paper-comic-reader-mac"
 
   conflicts_with cask: "simple-comic-paper"
   depends_on macos: :sonoma
