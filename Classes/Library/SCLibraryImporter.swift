@@ -77,7 +77,11 @@ enum SCLibraryImporter {
 
 		if let data = probe.coverData,
 		   let image = SCImageDownsampler.downsample(data, maxPixel: SCImageDownsampler.coverPixel) {
-			let name = "\(id.uuidString).jpg"
+			// A refreshed cover gets a new name, so views keyed on the URL and the decoded
+			// cover cache pick it up instead of showing the old picture until the next launch.
+			let name = existingID == nil
+				? "\(id.uuidString).jpg"
+				: "\(id.uuidString)-\(UUID().uuidString.prefix(8)).jpg"
 			if SCImageDownsampler.writeJPEG(image, to: SCLibraryStorage.coverURL(name)) {
 				prepared.coverName = name
 				if image.height > 0 {
@@ -109,6 +113,10 @@ enum SCLibraryImporter {
 	/// Folds a re-read of a known comic back in: cover, page count and metadata are replaced,
 	/// everything the reader owns (position, favourite, open count) is left alone.
 	static func merge(_ prepared: Prepared, into store: SCLibraryStore) {
+		if let newCover = prepared.coverName,
+		   let old = store.entry(id: prepared.id)?.coverName, old != newCover {
+			try? SCLibraryStorage.fm.removeItem(at: SCLibraryStorage.coverURL(old))
+		}
 		store.update(id: prepared.id) { entry in
 			entry.title = prepared.title
 			entry.coverName = prepared.coverName ?? entry.coverName

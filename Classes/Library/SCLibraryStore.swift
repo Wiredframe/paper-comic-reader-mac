@@ -21,6 +21,8 @@ final class SCLibraryStore: ObservableObject {
 	@Published private(set) var folders: [SCLibraryFolder] = []
 
 	private var saveWork: DispatchWorkItem?
+	/// Set when library.json exists but could not be read, so it is never overwritten.
+	private var isReadOnly = false
 	private let saveDelay: TimeInterval = 0.5
 
 	private init() {
@@ -115,7 +117,18 @@ final class SCLibraryStore: ObservableObject {
 
 	private func load() {
 		let url = SCLibraryStorage.indexURL
-		guard let data = try? Data(contentsOf: url) else { return }
+		guard SCLibraryStorage.fm.fileExists(atPath: url.path) else { return }
+		let data: Data
+		do {
+			data = try Data(contentsOf: url)
+		} catch {
+			// Present but unreadable right now. Starting empty would let the next save overwrite
+			// a good index, so stop saving for this launch instead.
+			NSLog("Simple Comic: library index could not be read (%@); not saving this session",
+				  String(describing: error))
+			isReadOnly = true
+			return
+		}
 		let decoder = JSONDecoder()
 		decoder.dateDecodingStrategy = .iso8601
 		do {
@@ -149,6 +162,7 @@ final class SCLibraryStore: ObservableObject {
 
 	private func writeNow() {
 		saveWork = nil
+		guard !isReadOnly else { return }
 		var document = SCLibraryDocument()
 		document.folders = folders
 		document.entries = entries

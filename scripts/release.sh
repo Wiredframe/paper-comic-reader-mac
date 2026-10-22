@@ -43,9 +43,16 @@ rm -rf "$DERIVED"
 # `generic/platform=macOS` is what makes this universal. Without a destination xcodebuild
 # builds for the machine it is running on, so a release cut on Apple Silicon would ship an
 # arm64-only app and leave Intel Macs with nothing, even though ARCHS lists both.
+#
+# MACOSX_DEPLOYMENT_TARGET on the command line reaches the vendored submodule projects too,
+# which still say 10.13; Xcode 27 refuses anything below 12.0.
+# DEPLOYMENT_POSTPROCESSING strips the release binaries, which `build` otherwise leaves with
+# their full symbol tables (about 4.6 MB of the download).
 xcodebuild -project "$PROJECT" -scheme "$SCHEME" -configuration Release \
 	-destination 'generic/platform=macOS' \
-	-derivedDataPath "$DERIVED" build
+	-derivedDataPath "$DERIVED" \
+	MACOSX_DEPLOYMENT_TARGET=14.0 DEPLOYMENT_POSTPROCESSING=YES \
+	build
 
 APP="$DERIVED/Build/Products/Release/$APP_NAME.app"
 if [ ! -d "$APP" ]; then

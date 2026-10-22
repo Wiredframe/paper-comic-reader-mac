@@ -575,10 +575,9 @@ struct SCCoverImage: View {
 	let maxPixel: CGFloat
 
 	@State private var image: NSImage?
-
-	private var cacheKey: String {
-		"\(url?.path ?? "")#\(Int(maxPixel))"
-	}
+	/// What the cell currently wants. A decode that finishes after the cell scrolled away or
+	/// moved on to another cover is dropped instead of pinning its bitmap.
+	@State private var wanted: URL?
 
 	var body: some View {
 		Group {
@@ -596,7 +595,10 @@ struct SCCoverImage: View {
 		// reload has to be driven from here — with the URL the closure is handed, never the
 		// one on `self`, which is a copy of the view as it was before the change.
 		.onChange(of: url) { newURL in load(newURL) }
-		.onDisappear { image = nil }
+		.onDisappear {
+			wanted = nil
+			image = nil
+		}
 	}
 
 	/// Loads `target`, which is passed in rather than read from `self` on purpose.
@@ -606,22 +608,26 @@ struct SCCoverImage: View {
 	/// bailed out every time and the pane only caught up on the *next* selection: it was
 	/// permanently one comic behind.
 	private func load(_ target: URL?) {
+		wanted = target
 		guard let target = target else {
 			image = nil
 			return
 		}
-		let key = "\(target.path)#\(Int(maxPixel))"
+		// Decoded in 128-pixel steps, so dragging the size slider reuses cached covers instead
+		// of re-decoding every visible one at each notch.
+		let pixel = (maxPixel / 128).rounded(.up) * 128
+		let key = "\(target.path)#\(Int(pixel))"
 		if let cached = SCImageCache.image(forKey: key) {
 			image = cached
 			return
 		}
 		image = nil
-		let pixel = maxPixel
 		DispatchQueue.global(qos: .userInitiated).async {
 			guard let decoded = SCImageDownsampler.downsample(url: target, maxPixel: pixel) else { return }
 			let nsImage = SCImageDownsampler.nsImage(decoded)
 			SCImageCache.set(nsImage, forKey: key)
 			DispatchQueue.main.async {
+				guard self.wanted == target else { return }
 				self.image = nsImage
 			}
 		}

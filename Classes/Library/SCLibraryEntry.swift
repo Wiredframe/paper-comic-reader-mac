@@ -284,7 +284,24 @@ struct SCLibraryDocument: Codable {
 	init(from decoder: Decoder) throws {
 		let container = try decoder.container(keyedBy: CodingKeys.self)
 		version = try container.decodeIfPresent(Int.self, forKey: .version) ?? 1
-		folders = try container.decodeIfPresent([SCLibraryFolder].self, forKey: .folders) ?? []
-		entries = try container.decodeIfPresent([SCLibraryEntry].self, forKey: .entries) ?? []
+		// Element by element: one entry this build can't read must not cost the whole library.
+		folders = (try container.decodeIfPresent([SCLossy<SCLibraryFolder>].self, forKey: .folders) ?? [])
+			.compactMap(\.value)
+		entries = (try container.decodeIfPresent([SCLossy<SCLibraryEntry>].self, forKey: .entries) ?? [])
+			.compactMap(\.value)
+	}
+}
+
+/// Decodes to nil instead of throwing, so an array of these skips the elements it can't read.
+struct SCLossy<Value: Decodable>: Decodable {
+	let value: Value?
+
+	init(from decoder: Decoder) throws {
+		do {
+			value = try Value(from: decoder)
+		} catch {
+			NSLog("Simple Comic: skipped an unreadable library record (%@)", String(describing: error))
+			value = nil
+		}
 	}
 }

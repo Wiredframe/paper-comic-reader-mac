@@ -100,7 +100,7 @@ Building from source has no such prompt.
 
 ## Build from source
 
-Requires Xcode 26 and macOS 11.5 or later at runtime. The Metal toolchain component is needed once
+Requires Xcode 26 or newer and macOS 14 or later at runtime. The Metal toolchain component is needed once
 for the paper effect kernel (`xcodebuild -downloadComponent MetalToolchain`).
 
 ```

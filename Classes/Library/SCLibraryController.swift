@@ -35,6 +35,7 @@ final class SCLibraryController: NSObject, ObservableObject {
 	}
 
 	@Published private(set) var scan: ScanProgress?
+	private var scanningFolderID: UUID?
 	@Published private(set) var download: DownloadProgress?
 	/// Files a scan couldn't read — shown once, as a count, rather than one alert per file.
 	@Published private(set) var skipped: [String] = []
@@ -48,6 +49,10 @@ final class SCLibraryController: NSObject, ObservableObject {
 	/// back when its window closes. Keyed by the session object, which is what `-endSession:`
 	/// hands over.
 	private var sessionEntries: [ObjectIdentifier: UUID] = [:]
+	/// Folders asked to scan while another scan was running.
+	private var pendingFolderIDs: [UUID] = []
+	/// Callers waiting on the fetch that is already loading their comic.
+	private var downloadWaiters: [(Result<URL, Error>) -> Void] = []
 
 	private override init() {
 		super.init()
@@ -94,10 +99,18 @@ final class SCLibraryController: NSObject, ObservableObject {
 	/// Scans one folder, then any folders queued behind it. One at a time on purpose: two
 	/// scans over the same network volume are slower than one, not faster.
 	func rescan(folderID: UUID, remaining: [UUID] = []) {
-		guard scan == nil, let folder = store.folder(id: folderID) else { return }
+		guard let folder = store.folder(id: folderID) else { return }
+		guard scan == nil else {
+			// A folder added while another scans waits its turn instead of being dropped.
+			for id in [folderID] + remaining where !pendingFolderIDs.contains(id) {
+				pendingFolderIDs.append(id)
+			}
+			return
+		}
 
 		cancelFlag.value = false
 		skipped = []
+		scanningFolderID = folderID
 		scan = ScanProgress(folderName: folder.name, done: 0, total: 0)
 
 		var seenPaths = Set<String>()
@@ -119,15 +132,22 @@ final class SCLibraryController: NSObject, ObservableObject {
 						switch outcome {
 						case .added(let prepared):
 							if let path = prepared.sourceRelativePath { seenPaths.insert(path) }
+							// The folder may have been removed while this file was being read.
+							guard self.store.folder(id: folderID) != nil else { return }
 							SCLibraryImporter.commit(prepared, into: self.store)
 						case .refreshed(let prepared):
 							if let path = prepared.sourceRelativePath { seenPaths.insert(path) }
 							SCLibraryImporter.merge(prepared, into: self.store)
+							self.dropStaleCopy(of: prepared.id)
 						case .unchanged(let id):
 							if let path = self.store.entry(id: id)?.sourceRelativePath {
 								seenPaths.insert(path)
 							}
 						case .failed(let path, _):
+							// The file is there, it just couldn't be read this time (half written,
+							// a network hiccup). Counting it as seen keeps its entry, cover and
+							// reading position; only files the walk no longer finds are pruned.
+							seenPaths.insert(path)
 							self.skipped.append(path)
 						}
 					})
@@ -137,6 +157,7 @@ final class SCLibraryController: NSObject, ObservableObject {
 
 			DispatchQueue.main.async {
 				self.scan = nil
+				self.scanningFolderID = nil
 				if let failure = failure {
 					self.present(failure)
 				} else if !self.cancelFlag.value {
@@ -144,8 +165,11 @@ final class SCLibraryController: NSObject, ObservableObject {
 					self.pruneMissing(folderID: folderID, seen: seenPaths)
 					self.store.updateFolder(id: folderID) { $0.dateScanned = Date() }
 				}
-				if let next = remaining.first {
-					self.rescan(folderID: next, remaining: Array(remaining.dropFirst()))
+				// A stop ends the whole run, not just the folder it happened to land on.
+				let queued = self.cancelFlag.value ? [] : remaining + self.pendingFolderIDs
+				self.pendingFolderIDs = []
+				if let next = queued.first {
+					self.rescan(folderID: next, remaining: Array(queued.dropFirst()))
 				}
 			}
 		}
@@ -156,7 +180,18 @@ final class SCLibraryController: NSObject, ObservableObject {
 	}
 
 	func removeFolder(id: UUID) {
+		pendingFolderIDs.removeAll { $0 == id }
+		if scan != nil, scanningFolderID == id { cancelRunningScan() }
 		store.removeFolder(id: id)
+	}
+
+	/// The file behind a refreshed entry changed, so a copy fetched from the old one is stale:
+	/// drop it, and the next open fetches the new file. Kept while the comic is open.
+	private func dropStaleCopy(of entryID: UUID) {
+		guard let entry = store.entry(id: entryID), entry.isFolderBacked,
+			  openWindow(for: entryID) == nil else { return }
+		SCLibraryStorage.removeLocalArchive(of: entry)
+		store.update(id: entryID) { $0.hasLocalArchive = false }
 	}
 
 	/// Entries whose file is no longer in the folder. Their cover and reading state go with
@@ -223,6 +258,11 @@ final class SCLibraryController: NSObject, ObservableObject {
 	func fetch(_ entry: SCLibraryEntry, completion: @escaping (Result<URL, Error>) -> Void) {
 		// One at a time; the caller is told rather than left waiting on a callback that would
 		// never arrive.
+		if download?.entryID == entry.id {
+			// Already on its way: wait for that fetch rather than reporting a different comic.
+			downloadWaiters.append(completion)
+			return
+		}
 		guard download == nil else {
 			completion(.failure(SCLibrarySource.SourceError.busy))
 			return
@@ -230,7 +270,8 @@ final class SCLibraryController: NSObject, ObservableObject {
 		guard let folderID = entry.sourceFolderID,
 			  let folder = store.folder(id: folderID),
 			  let relativePath = entry.sourceRelativePath else {
-			completion(.failure(SCLibrarySource.SourceError.unresolved(entry.title)))
+			completion(.failure(SCLibrarySource.SourceError.unresolved(
+				entry.sourceFolderID.flatMap { store.folder(id: $0)?.name } ?? entry.title)))
 			return
 		}
 
@@ -265,6 +306,9 @@ final class SCLibraryController: NSObject, ObservableObject {
 					SCLibraryStorage.removeLocalArchive(of: entry)
 				}
 				completion(result)
+				let waiters = self?.downloadWaiters ?? []
+				self?.downloadWaiters = []
+				waiters.forEach { $0(result) }
 			}
 		}
 	}
@@ -320,6 +364,11 @@ final class SCLibraryController: NSObject, ObservableObject {
 	/// session belongs to.
 	private func present(entry: SCLibraryEntry, url: URL) {
 		guard let delegate = NSApp.delegate as? SimpleComicAppDelegate else { return }
+		// Two opens can wait on the same fetch; the second one only raises the window.
+		if let existing = openWindow(for: entry.id) {
+			existing.window?.makeKeyAndOrderFront(self)
+			return
+		}
 		let session = delegate.newSession(withFileURLs: [url])
 		guard let images = session.images, !images.isEmpty else {
 			// The copy is unreadable — most likely truncated. Drop it so the next open refetches.
@@ -426,13 +475,14 @@ final class SCLibraryController: NSObject, ObservableObject {
 				try? fm.removeItem(at: partial)
 				throw SCLibrarySource.SourceError.cancelled
 			}
-			let chunk = input.readData(ofLength: chunkSize)
-			if chunk.isEmpty { break }
-			output.write(chunk)
+			// The throwing variants: the old readData/write raise an Objective-C exception on an
+			// I/O error (a share that drops off, a full disk), which Swift cannot catch.
+			guard let chunk = try input.read(upToCount: chunkSize), !chunk.isEmpty else { break }
+			try output.write(contentsOf: chunk)
 			written += Int64(chunk.count)
 			if total > 0 { onProgress(Double(written) / Double(total)) }
 		}
-		try? output.close()
+		try output.close()
 		try fm.moveItem(at: partial, to: destination)
 		onProgress(1)
 	}

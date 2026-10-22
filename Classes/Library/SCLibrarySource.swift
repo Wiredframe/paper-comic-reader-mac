@@ -93,6 +93,17 @@ enum SCLibrarySource {
 	static func withAccess<T>(to folder: SCLibraryFolder, _ body: (URL) throws -> T) throws -> T {
 		let resolved = try resolve(folder)
 		let url = resolved.url
+		if let refreshed = resolved.refreshedBookmark {
+			// Keep the renewed grant: a stale bookmark that is never rewritten stops resolving
+			// altogether after the next move. The store is main-thread only.
+			DispatchQueue.main.async {
+				SCLibraryStore.shared.updateFolder(id: folder.id) { stored in
+					stored.bookmark = refreshed
+					stored.path = url.path
+					stored.name = url.lastPathComponent
+				}
+			}
+		}
 		let scoped = url.startAccessingSecurityScopedResource()
 		defer { if scoped { url.stopAccessingSecurityScopedResource() } }
 		guard (try? url.checkResourceIsReachable()) == true else {

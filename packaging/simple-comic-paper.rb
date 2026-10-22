@@ -34,7 +34,7 @@ cask "simple-comic-paper" do
   homepage "https://github.com/Wiredframe/Simple-Comic"
 
   conflicts_with cask: "homebrew/cask/simple-comic"
-  depends_on macos: :big_sur
+  depends_on macos: :sonoma
 
   app "Simple Comic.app"
 
