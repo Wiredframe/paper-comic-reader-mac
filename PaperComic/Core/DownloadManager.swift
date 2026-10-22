@@ -50,6 +50,8 @@ final class DownloadManager {
 
     func ticket(for id: UUID) -> Ticket? { tickets[id] }
     func isDownloading(_ id: UUID) -> Bool { tickets[id] != nil }
+    /// Mac port: whether anything is downloading, for the library's status line.
+    var hasTickets: Bool { !tickets.isEmpty }
 
     /// Start fetching this comic, or hand back the fetch already running for it. Never a second
     /// copy of the same comic: it would pull the same bytes twice and both would move into the

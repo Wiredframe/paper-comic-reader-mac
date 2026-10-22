@@ -213,8 +213,8 @@ enum LegacyMigration {
 
 	// MARK: Paper effect
 
-	/// Simple Comic kept the paper settings under its own keys. Taken over once, and only where
-	/// this app has no value of its own yet.
+	/// Simple Comic kept the paper and library view settings under its own keys. Taken over
+	/// once, and only where this app has no value of its own yet.
 	static func migratePaperSettings(defaults: UserDefaults) {
 		let pairs = [("SCPaperEffectEnabled", "paper.enabled"),
 					 ("SCPaperShowThrough", "paper.showThrough"),
@@ -224,6 +224,23 @@ enum LegacyMigration {
 					 ("SCPaperFiberScale", "paper.fiberScale")]
 		for (old, new) in pairs where defaults.object(forKey: new) == nil {
 			if let value = defaults.object(forKey: old) { defaults.set(value, forKey: new) }
+		}
+		// The library window's view settings.
+		let library = [("SCLibrarySortAscending", "library.sortAscending"),
+					   ("SCLibraryColumnWidth", "library.columnWidth"),
+					   ("SCLibraryShowsDetails", "library.showsDetails")]
+		for (old, new) in library where defaults.object(forKey: new) == nil {
+			if let value = defaults.object(forKey: old) { defaults.set(value, forKey: new) }
+		}
+		if defaults.object(forKey: "library.sort") == nil, let sort = defaults.string(forKey: "SCLibrarySortField") {
+			defaults.set(sort, forKey: "library.sort")
+		}
+		if defaults.object(forKey: "library.filter") == nil {
+			if defaults.bool(forKey: "SCLibraryOnlyFavorites") {
+				defaults.set("favorites", forKey: "library.filter")
+			} else if defaults.bool(forKey: "SCLibraryOnlyDownloaded") {
+				defaults.set("downloaded", forKey: "library.filter")
+			}
 		}
 	}
 }

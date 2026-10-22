@@ -72,6 +72,11 @@ targets:
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: "Accent Color"
         LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/../Frameworks"
         ENABLE_HARDENED_RUNTIME: NO
+      # Debug builds get a container of their own, so development never touches the real
+      # library. Release keeps the real id.
+      configs:
+        Debug:
+          PRODUCT_BUNDLE_IDENTIFIER: de.wiredframe.simplecomic.dev
 
   Paper Comic Thumbnails:
     type: app-extension
@@ -91,6 +96,9 @@ targets:
         INFOPLIST_FILE: Extensions/Thumbnail/Info.plist
         CODE_SIGN_ENTITLEMENTS: Extensions/Thumbnail/Thumbnail.entitlements
         LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/../Frameworks @executable_path/../../../../Frameworks"
+      configs:
+        Debug:
+          PRODUCT_BUNDLE_IDENTIFIER: de.wiredframe.simplecomic.dev.thumbnails
 
   # Unit tests compile the core sources straight in rather than loading the app: a hosted test
   # would launch the app with its real bundle id, and with it the real sandbox container and
