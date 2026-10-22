@@ -20,10 +20,18 @@ enum TestStorage {
 	static func prepare() {
 		if Storage.rootOverride == nil {
 			Storage.rootOverride = root
+			LibrarySource.defaults = defaults
 		}
 		precondition(Storage.appSupport.path.hasPrefix(root.path),
 					 "Storage was touched before the tests could redirect it")
 	}
+
+	/// A defaults domain of the tests' own, emptied on first use.
+	static let defaults: UserDefaults = {
+		let name = "de.wiredframe.papercomic.tests"
+		UserDefaults().removePersistentDomain(forName: name)
+		return UserDefaults(suiteName: name)!
+	}()
 
 	/// A solid red JPEG of the given size.
 	static func jpeg(width: Int, height: Int) -> Data {
