@@ -17,7 +17,8 @@ permissions:
 
 jobs:
   build:
-    runs-on: macos-15
+    # The newest image: the Icon Composer app icon crashed actool on macos-15 with Xcode 26.3.
+    runs-on: macos-latest
 
     steps:
       - name: Check out
