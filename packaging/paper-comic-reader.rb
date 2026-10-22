@@ -10,6 +10,8 @@
 # It replaces the `simple-comic-paper` cask: the app was Simple Comic with a paper effect until 3.0,
 # and keeps that app's bundle id, so the library and settings carry over. The tap's
 # `cask_renames.json` maps the old token onto this one, so `brew upgrade` moves people across.
+# No `conflicts_with` for the old token: through the rename it resolves to this cask itself, and
+# Homebrew then refuses to install it ("conflicts with 'paper-comic-reader'").
 #
 # The build is not notarised (see scripts/release.sh for why), so macOS quarantines the download.
 # Homebrew has no stanza to opt out of that, which leaves `postflight_steps` clearing the flag as
@@ -27,7 +29,6 @@ cask "paper-comic-reader" do
   desc "Comic reader with a paper effect and a library"
   homepage "https://github.com/Wiredframe/paper-comic-reader-mac"
 
-  conflicts_with cask: "simple-comic-paper"
   depends_on macos: :sonoma
 
   app "Paper Comic Reader.app"
