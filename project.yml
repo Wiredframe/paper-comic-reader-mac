@@ -59,7 +59,11 @@ targets:
         excludes:
           - "App/Info.plist"
           - "App/PaperComic.entitlements"
-      - path: Resources/Media.xcassets
+          - "Resources/AppIcon.icon"
+      # The same Icon Composer icon as the iOS app, referenced as one file so actool compiles it.
+      - path: PaperComic/Resources/AppIcon.icon
+        type: file
+        buildPhase: resources
     settings:
       base:
         PRODUCT_NAME: "Paper Comic Reader"

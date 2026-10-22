@@ -1,9 +1,0 @@
-[submodule "Vendor/UniversalDetector"]
-	path = Vendor/UniversalDetector
-	url = https://github.com/MaddTheSane/UniversalDetector.git
-[submodule "XADMaster-2"]
-	path = Vendor/XADMaster
-	url = https://github.com/MaddTheSane/XADMaster-2.git
-[submodule "Vendor/ios-osx-webp-decoder"]
-	path = Vendor/ios-osx-webp-decoder
-	url = https://github.com/MaddTheSane/ios-osx-webp-decoder.git

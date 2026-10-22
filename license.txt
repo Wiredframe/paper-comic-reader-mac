@@ -1,8 +1,10 @@
-Simple Comic
-This is a fork of Simple Comic by Dancing Tortoise Software, maintained by
-Ulf Schuster. Additions in this fork are copyright (c) 2026 Ulf Schuster and are
-released under the same terms. The original copyright notice and MIT permission
-notice follow, and apply to this software as a whole.
+Paper Comic Reader
+Copyright (c) 2026 Ulf Schuster, released under the MIT licence below.
+
+Paper Comic Reader grew out of a fork of Simple Comic by Dancing Tortoise
+Software, continued by C.W. Betts (MaddTheSane). Since 3.0 its code is a new
+app, but it began as theirs, so the original copyright notice and MIT
+permission notice follow and apply to this software as a whole.
 
 ----------------------------------------------------------------------
 

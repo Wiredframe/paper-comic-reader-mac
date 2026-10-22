@@ -1,4 +1,4 @@
-# Builds Simple Comic when a version tag is pushed and attaches the app to a GitHub release. The tag drives it, so cutting a release is `git tag v1.2.3 && git push --tags`.
+# Builds Paper Comic Reader when a version tag is pushed and attaches the app to a GitHub release. The tag drives it, so cutting a release is `git tag v1.2.3 && git push --tags`.
 #
 # The build is ad-hoc signed and not notarised, on purpose: notarising would tie every release
 # to a paid Apple Developer membership. The release notes tell users how to get past Gatekeeper.
@@ -20,10 +20,12 @@ jobs:
     runs-on: macos-15
 
     steps:
-      - name: Check out, with submodules
+      - name: Check out
         uses: actions/checkout@v4
-        with:
-          submodules: recursive
+
+      # The Xcode project is generated from project.yml.
+      - name: Install XcodeGen
+        run: brew install xcodegen
 
       # /Applications/Xcode.app on the runner images is not necessarily the newest one, and an
       # older toolchain fails on things as basic as @MainActor. Pick the highest version that is
@@ -40,6 +42,13 @@ jobs:
       # part of some runner images already; downloading it is a no-op when it is.
       - name: Ensure the Metal toolchain
         run: xcodebuild -downloadComponent MetalToolchain || true
+
+      # The unit tests run outside the app, against a temporary folder (see PaperComicTests).
+      - name: Test
+        run: |
+          xcodegen generate --quiet
+          xcodebuild -project PaperComicReader.xcodeproj -scheme "Paper Comic Reader" \
+            -destination 'platform=macOS' test
 
       - name: Build and package
         run: |
@@ -64,15 +73,15 @@ jobs:
 
           \`\`\`
           brew tap wiredframe/tap
-          brew trust --cask wiredframe/tap/simple-comic-paper
-          brew install --cask simple-comic-paper
+          brew trust --cask wiredframe/tap/paper-comic-reader
+          brew install --cask paper-comic-reader
           \`\`\`
 
-          Or download the zip below and move \`Simple Comic.app\` into \`/Applications\`.
+          Or download the zip below and move \`Paper Comic Reader.app\` into \`/Applications\`.
 
           The app is signed but not notarised. The cask clears the quarantine flag for you;
           after a manual download, open it once via right-click → **Open**, or clear it:
-          \`xattr -dr com.apple.quarantine "/Applications/Simple Comic.app"\`
+          \`xattr -dr com.apple.quarantine "/Applications/Paper Comic Reader.app"\`
 
           SHA-256: \`$SHA\`
           EOF
@@ -81,10 +90,10 @@ jobs:
           # of failing on "release already exists".
           if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
             gh release edit "${GITHUB_REF_NAME}" \
-              --title "Simple Comic ${GITHUB_REF_NAME#v}" --notes "$NOTES"
+              --title "Paper Comic Reader ${GITHUB_REF_NAME#v}" --notes "$NOTES"
             gh release upload "${GITHUB_REF_NAME}" "$ARCHIVE" --clobber
           else
             gh release create "${GITHUB_REF_NAME}" "$ARCHIVE" \
-              --title "Simple Comic ${GITHUB_REF_NAME#v}" \
+              --title "Paper Comic Reader ${GITHUB_REF_NAME#v}" \
               --notes "$NOTES"
           fi

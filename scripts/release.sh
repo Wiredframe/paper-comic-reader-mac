@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Builds a universal Release build of Simple Comic and packs it for a GitHub release.
+# Builds a universal Release build of Paper Comic Reader and packs it for a GitHub release.
 #
 # The build is ad-hoc signed, which is what an Xcode build without a Developer ID produces and
 # what Apple Silicon needs at minimum in order to run an app at all. It is deliberately NOT
@@ -24,11 +24,14 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-PROJECT="SimpleComic.xcodeproj"
-SCHEME="Simple Comic"
-APP_NAME="Simple Comic"
+PROJECT="PaperComicReader.xcodeproj"
+SCHEME="Paper Comic Reader"
+APP_NAME="Paper Comic Reader"
 OUT_DIR="${1:-build/release}"
 DERIVED="build/release-dd"
+
+# The project is generated from project.yml (XcodeGen) and not checked in.
+xcodegen generate --quiet
 
 VERSION=$(xcodebuild -project "$PROJECT" -scheme "$SCHEME" -configuration Release \
 	-showBuildSettings 2>/dev/null | awk -F' = ' '/ MARKETING_VERSION /{print $2; exit}')
@@ -44,14 +47,12 @@ rm -rf "$DERIVED"
 # builds for the machine it is running on, so a release cut on Apple Silicon would ship an
 # arm64-only app and leave Intel Macs with nothing, even though ARCHS lists both.
 #
-# MACOSX_DEPLOYMENT_TARGET on the command line reaches the vendored submodule projects too,
-# which still say 10.13; Xcode 27 refuses anything below 12.0.
 # DEPLOYMENT_POSTPROCESSING strips the release binaries, which `build` otherwise leaves with
-# their full symbol tables (about 4.6 MB of the download).
+# their full symbol tables.
 xcodebuild -project "$PROJECT" -scheme "$SCHEME" -configuration Release \
 	-destination 'generic/platform=macOS' \
 	-derivedDataPath "$DERIVED" \
-	MACOSX_DEPLOYMENT_TARGET=14.0 DEPLOYMENT_POSTPROCESSING=YES \
+	DEPLOYMENT_POSTPROCESSING=YES \
 	build
 
 APP="$DERIVED/Build/Products/Release/$APP_NAME.app"
@@ -61,7 +62,7 @@ if [ ! -d "$APP" ]; then
 fi
 
 mkdir -p "$OUT_DIR"
-ARCHIVE="$OUT_DIR/Simple-Comic-$VERSION.zip"
+ARCHIVE="$OUT_DIR/Paper-Comic-Reader-$VERSION.zip"
 rm -f "$ARCHIVE"
 ditto -c -k --sequesterRsrc --keepParent "$APP" "$ARCHIVE"
 

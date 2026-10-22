@@ -1,130 +1,121 @@
 <p align="center">
-  <img src="docs/icon.png" width="128" alt="Simple Comic">
+  <img src="docs/icon.png" width="128" alt="Paper Comic Reader">
 </p>
 
-<h1 align="center">Simple Comic</h1>
+<h1 align="center">Paper Comic Reader</h1>
 
 <p align="center">
-  A streamlined comic viewer for macOS.<br>
-  This fork adds a paper effect and a library.
+  A comic reader for the Mac that makes the page look printed.<br>
+  The Mac companion of Paper Comic on iPhone and iPad.
 </p>
 
 ---
 
-Simple Comic is [Dancing Tortoise Software's comic viewer](https://github.com/arauchfuss/Simple-Comic),
-continued by [MaddTheSane](https://github.com/MaddTheSane/Simple-Comic). Nearly all of it is their
-work, and the reading window is deliberately unchanged: the whole point of the app is to get out of
-the way while you read.
-
-This fork adds two things.
+One window: the library, which turns into the reader when you open a comic and back again when
+you are done. More comics open as tabs. The window can fit itself to the pages, the full height of
+the screen and exactly as wide as a page or a spread, so nothing but the comic is on screen.
 
 ## Paper effect
 
 Printed comics do not have pure black ink on pure white stock. The paper is warm and slightly rough,
 and its fibre shows *through* uneven ink rather than sitting on top of it. The effect reproduces that:
 harsh blacks are lifted, a warm tone is applied, and a paper texture is composited so that dark and
-coloured areas keep their tooth. It runs as a Metal Core Image kernel, so it costs a page decode, not
-a stutter.
+coloured areas keep their tooth. It runs as a Metal Core Image kernel, off the main thread.
 
-Four parameters — show-through, grain, warmth and black lift — plus presets for **Cream paper**,
-**Newsprint**, **Manga** and **E-Ink**. The settings panel previews them live on a sample page.
+Four parameters (show-through, grain, warmth, black lift) and presets for **Cream paper**,
+**Newsprint**, **Manga** and **E-Ink**, previewed live in Settings.
 
 ## Library
 
-The library stores **covers and metadata, not your comics**. Point it at a folder and it reads each
-file's first page and its `ComicInfo.xml`; the archives stay exactly where they are. When you open a
-comic, its bytes are fetched into the app on demand, and you can throw that copy away again
-afterwards without losing the cover, the metadata or your reading position. That keeps a large
-collection on a NAS or an external disk usable without duplicating it.
+The library holds **covers and metadata, not your comics**. Point it at a folder and it reads each
+comic's first page and its `ComicInfo.xml`; the files stay where they are. A comic is downloaded
+when you open it, and the download can be removed again without losing the cover, the metadata,
+your bookmarks or your place. A large collection on a NAS or an external disk stays usable without
+being copied.
 
-- Cover grid with search, sorting and filters, and a details sidebar for series, credits and the
-  story index that anthology issues carry in their summary
-- Reading position written back per comic, so a comic reopens where you left it
-- Opens at the last comic you were reading, next to the library window
-- Keyboard navigation, and the usual double-click to open
+- Cover grid with search, filters, sort orders and a details inspector with credits and the story
+  index anthology issues carry
+- Bookmarks, with every bookmarked page in the library at a glance
+- Comics can also be imported straight in, from the Finder or with File › Import Comics
 
-## Live Text
+### Moving a library between Mac, iPhone and iPad
 
-Text in comics is recognised on device (Apple Silicon) and can be selected, copied, spoken, looked up
-and **translated**.
+File › Export Library writes one `.zip` with reading progress, favorites, bookmarks and the comics
+you imported yourself. Paper Comic on iPhone and iPad reads the same file, and writes it too, so a
+library moves either way. Comics from the library folder travel as references and are fetched from
+the folder on the other device.
 
-- The cursor turns into an I-beam over selectable text; drag to select
-- **Copy**, **Select All** and **Speak** on the **Edit** menu work
-- Right-click a selection for Copy, Look Up, Translate and Speak
-- ⌘-drag adds another selection rectangle
-- Two-page spreads, rotation, page order and zoom all behave
+## Reading
 
-## Formats
+- One page or two side by side, the cover alone as a printed comic opens, wide pages on their own
+- Left to right or right to left (manga)
+- Fit the page or the width, zoom with a pinch or ⌘+ and ⌘−, drag a zoomed page around
+- Turn pages with the arrow keys, the space bar, a two-finger swipe or a click on the page's edge
+- **Live Text**: text on a page can be selected, copied, looked up and translated
+- Quick Look shows a comic's cover in the Finder
 
-CBZ, CBR, CB7, CBT, ZIP, RAR, 7z, LHA, Tar, PDF, and folders of images.
+Formats: CBZ (and plain ZIP archives of images), like the iOS app.
 
-**Quick Comic**, a bundled Quick Look plugin, gives Finder previews and thumbnails for `cbr` and
-`cbz` files.
+## Coming from Simple Comic
+
+Up to 2.0 this was a fork of [Simple Comic](https://github.com/MaddTheSane/Simple-Comic) with a
+paper effect and a library. 3.0 is a new app built on the core of the iOS app. It keeps Simple
+Comic's bundle id, so its library (folder, covers, downloads, reading positions, favorites) and the
+paper settings are taken over on first launch. The old files are copied, never moved.
 
 ## Install
 
 ```
 brew tap wiredframe/tap
-brew trust --cask wiredframe/tap/simple-comic-paper
-brew install --cask simple-comic-paper
+brew trust --cask wiredframe/tap/paper-comic-reader
+brew install --cask paper-comic-reader
 ```
 
-Homebrew refuses casks from taps outside its own repositories until you say you trust them —
-`brew trust` is that "yes", and it is asked once per tap, for any third-party cask.
-
-The cask is called `simple-comic-paper` only so this line stays short: Homebrew's own repository
-already has a `simple-comic`, and two of them would mean typing the fully qualified name every
-time. The app is still Simple Comic and still installs to `/Applications`, so it replaces the
-build from Homebrew's cask rather than sitting beside it.
+Homebrew refuses casks from taps outside its own repositories until you say you trust them, and
+`brew trust` is that "yes", asked once per tap.
 
 Or download the `.zip` from [Releases](https://github.com/Wiredframe/Simple-Comic/releases) and move
-`Simple Comic.app` into `/Applications`.
+`Paper Comic Reader.app` into `/Applications`.
 
 ### About Gatekeeper
 
 Builds here are signed the way any local Xcode build is, but they are not notarised by Apple.
 Notarising requires a paid Apple Developer membership, and tying every release of an open-source
 app to a subscription is not a trade this project wants to make. macOS therefore quarantines the
-download and would refuse to open it the first time. Homebrew 6 removed the `--no-quarantine`
-flag that used to sidestep this, so the cask clears the attribute itself after installing and
-`brew install` just works.
+download; the cask clears that flag after installing, so `brew install` just works.
 
-**After a manual download** the flag is still there, so open the app once via right-click →
-**Open**, or run:
+**After a manual download** open the app once via right-click › **Open**, or run:
 
 ```
-xattr -dr com.apple.quarantine "/Applications/Simple Comic.app"
+xattr -dr com.apple.quarantine "/Applications/Paper Comic Reader.app"
 ```
-
-Building from source has no such prompt.
 
 ## Build from source
 
-Requires Xcode 26 or newer and macOS 14 or later at runtime. The Metal toolchain component is needed once
-for the paper effect kernel (`xcodebuild -downloadComponent MetalToolchain`).
+Requires macOS 14 or later, Xcode 26 or newer, [XcodeGen](https://github.com/yonaskolb/XcodeGen)
+(`brew install xcodegen`) and, once, the Metal toolchain for the paper kernel
+(`xcodebuild -downloadComponent MetalToolchain`).
 
 ```
 git clone https://github.com/Wiredframe/Simple-Comic.git
 cd Simple-Comic
-git submodule update --init --recursive
-xcodebuild -project SimpleComic.xcodeproj -scheme "Simple Comic" build
+xcodegen generate
+xcodebuild -project PaperComicReader.xcodeproj -scheme "Paper Comic Reader" build
 ```
 
-`scripts/release.sh` builds a universal Release configuration, packs it and prints the SHA-256
-the Homebrew cask needs.
+Debug builds use the bundle id `de.wiredframe.simplecomic.dev` and so a library of their own; only
+Release builds see the real one. `xcodebuild … test` runs the unit tests, which never touch a
+library at all. `scripts/release.sh` builds a universal Release configuration, packs it and prints
+the SHA-256 the cask needs.
 
 ## Privacy
 
-The app collects nothing. Text recognition and translation are handled by macOS on your machine.
-
-GitHub collects data when you interact with the project here, which is outside our control.
+The app collects nothing. Text recognition and translation are handled by macOS on your Mac.
 
 ## Licence and credits
 
-MIT — see [`license.txt`](license.txt), which keeps the original notice.
+MIT, see [`license.txt`](license.txt), which keeps the original Simple Comic notice.
 
 - **Simple Comic** by Dancing Tortoise Software, continued by
-  [MaddTheSane](https://github.com/MaddTheSane/Simple-Comic)
-- **XADMaster** by Dag Ågren, for archive handling (LGPL 2.1). The unrar sources it contains may not
-  be used to recreate the RAR compression algorithm.
-- **UniversalDetector** for text encoding detection, and **WebP** support via libwebp
+  [MaddTheSane](https://github.com/MaddTheSane/Simple-Comic), where this app began
+- **ZIPFoundation** by Thomas Zoechling, for reading CBZ archives (MIT)
