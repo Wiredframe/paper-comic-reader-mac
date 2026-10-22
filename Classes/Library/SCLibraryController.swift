@@ -36,6 +36,7 @@ final class SCLibraryController: NSObject, ObservableObject {
 
 	@Published private(set) var scan: ScanProgress?
 	private var scanningFolderID: UUID?
+	private var scannedFolderRemoved = false
 	@Published private(set) var download: DownloadProgress?
 	/// Files a scan couldn't read — shown once, as a count, rather than one alert per file.
 	@Published private(set) var skipped: [String] = []
@@ -99,10 +100,15 @@ final class SCLibraryController: NSObject, ObservableObject {
 	/// Scans one folder, then any folders queued behind it. One at a time on purpose: two
 	/// scans over the same network volume are slower than one, not faster.
 	func rescan(folderID: UUID, remaining: [UUID] = []) {
-		guard let folder = store.folder(id: folderID) else { return }
+		guard let folder = store.folder(id: folderID) else {
+			// Removed while it waited: carry on with the rest of the run.
+			if let next = remaining.first { rescan(folderID: next, remaining: Array(remaining.dropFirst())) }
+			return
+		}
 		guard scan == nil else {
 			// A folder added while another scans waits its turn instead of being dropped.
-			for id in [folderID] + remaining where !pendingFolderIDs.contains(id) {
+			for id in [folderID] + remaining
+			where id != scanningFolderID && !pendingFolderIDs.contains(id) {
 				pendingFolderIDs.append(id)
 			}
 			return
@@ -135,10 +141,11 @@ final class SCLibraryController: NSObject, ObservableObject {
 							// The folder may have been removed while this file was being read.
 							guard self.store.folder(id: folderID) != nil else { return }
 							SCLibraryImporter.commit(prepared, into: self.store)
-						case .refreshed(let prepared):
+						case .refreshed(let prepared, let fileChanged):
 							if let path = prepared.sourceRelativePath { seenPaths.insert(path) }
 							SCLibraryImporter.merge(prepared, into: self.store)
-							self.dropStaleCopy(of: prepared.id)
+							// Re-read only for a missing cover: the download is still good.
+							if fileChanged { self.dropStaleCopy(of: prepared.id) }
 						case .unchanged(let id):
 							if let path = self.store.entry(id: id)?.sourceRelativePath {
 								seenPaths.insert(path)
@@ -166,7 +173,15 @@ final class SCLibraryController: NSObject, ObservableObject {
 					self.store.updateFolder(id: folderID) { $0.dateScanned = Date() }
 				}
 				// A stop ends the whole run, not just the folder it happened to land on.
-				let queued = self.cancelFlag.value ? [] : remaining + self.pendingFolderIDs
+				// Removing the folder being scanned stops only that scan.
+				let stopped = self.cancelFlag.value && !self.scannedFolderRemoved
+				self.scannedFolderRemoved = false
+				var queued: [UUID] = []
+				if !stopped {
+					for id in remaining + self.pendingFolderIDs where id != folderID && !queued.contains(id) {
+						queued.append(id)
+					}
+				}
 				self.pendingFolderIDs = []
 				if let next = queued.first {
 					self.rescan(folderID: next, remaining: Array(queued.dropFirst()))
@@ -181,7 +196,10 @@ final class SCLibraryController: NSObject, ObservableObject {
 
 	func removeFolder(id: UUID) {
 		pendingFolderIDs.removeAll { $0 == id }
-		if scan != nil, scanningFolderID == id { cancelRunningScan() }
+		if scan != nil, scanningFolderID == id {
+			scannedFolderRemoved = true
+			cancelRunningScan()
+		}
 		store.removeFolder(id: id)
 	}
 
@@ -189,7 +207,7 @@ final class SCLibraryController: NSObject, ObservableObject {
 	/// drop it, and the next open fetches the new file. Kept while the comic is open.
 	private func dropStaleCopy(of entryID: UUID) {
 		guard let entry = store.entry(id: entryID), entry.isFolderBacked,
-			  openWindow(for: entryID) == nil else { return }
+			  download?.entryID != entryID, openWindow(for: entryID) == nil else { return }
 		SCLibraryStorage.removeLocalArchive(of: entry)
 		store.update(id: entryID) { $0.hasLocalArchive = false }
 	}

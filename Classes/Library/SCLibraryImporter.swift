@@ -40,7 +40,7 @@ enum SCLibraryImporter {
 		case added(Prepared)
 		/// A known comic whose file changed on disk (re-tagged, replaced) — cover and
 		/// metadata are refreshed, reading state is kept.
-		case refreshed(Prepared)
+		case refreshed(Prepared, fileChanged: Bool)
 		/// Known and unchanged. Nothing was opened.
 		case unchanged(id: UUID)
 		/// Couldn't be read: encrypted, corrupt, or not actually a comic.
@@ -194,11 +194,13 @@ enum SCLibraryImporter {
 	private static func examine(_ file: SCLibrarySource.FoundFile,
 								folder: SCLibraryFolder,
 								known: KnownFile?) -> ScanOutcome {
+		var fileChanged = true
 		if let known = known {
 			let sameSize = known.size == file.size
 			let sameDate = known.modified == nil || file.modified == nil
 				|| abs(known.modified!.timeIntervalSince(file.modified!)) < 1
-			if sameSize, sameDate, known.hasCover {
+			fileChanged = !(sameSize && sameDate)
+			if !fileChanged, known.hasCover {
 				return .unchanged(id: known.id)
 			}
 		}
@@ -209,7 +211,7 @@ enum SCLibraryImporter {
 									   size: file.size,
 									   modified: file.modified,
 									   reusing: known?.id)
-			return known == nil ? .added(prepared) : .refreshed(prepared)
+			return known == nil ? .added(prepared) : .refreshed(prepared, fileChanged: fileChanged)
 		} catch {
 			return .failed(relativePath: file.relativePath, error: error)
 		}
