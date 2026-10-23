@@ -851,6 +851,38 @@
         }
       }
     },
+    "Clear Recents": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verlauf leeren"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Svuota recenti"
+          }
+        }
+      }
+    },
+    "Clear the list of recent comics. The comics stay in the library.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Leert den Verlauf. Die Comics bleiben in der Bibliothek."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Svuota l’elenco dei fumetti recenti. I fumetti restano nella libreria."
+          }
+        }
+      }
+    },
     "Click the left or right edge to turn pages": {
       "localizations": {
         "de": {
@@ -911,6 +943,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Fumetti su questo Mac"
+          }
+        }
+      }
+    },
+    "Comics you open show up here.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Comics, die du öffnest, erscheinen hier."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qui compaiono i fumetti che apri."
           }
         }
       }
@@ -1907,6 +1955,22 @@
         }
       }
     },
+    "No Recent Comics": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keine zuletzt gelesenen Comics"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nessun fumetto recente"
+          }
+        }
+      }
+    },
     "None": {
       "localizations": {
         "de": {
@@ -2357,6 +2421,22 @@
         }
       }
     },
+    "Recents": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verlauf"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recenti"
+          }
+        }
+      }
+    },
     "Remove": {
       "localizations": {
         "de": {
@@ -2481,6 +2561,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Rimuovi dalla libreria…"
+          }
+        }
+      }
+    },
+    "Remove from Recents": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aus dem Verlauf entfernen"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rimuovi dai recenti"
           }
         }
       }

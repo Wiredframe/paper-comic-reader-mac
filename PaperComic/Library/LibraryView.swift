@@ -14,6 +14,8 @@ import SwiftUI
 import SwiftData
 
 enum LibraryScope: String, CaseIterable, Identifiable {
+	/// The comics opened so far, the last one first: the shelf reached for most.
+	case recents
 	case comics
 	case bookmarks
 	var id: String { rawValue }
@@ -88,7 +90,7 @@ struct LibraryView: View {
 	var body: some View {
 		VStack(spacing: 0) {
 			switch scope {
-			case .comics: comics
+			case .recents, .comics: comics
 			case .bookmarks: BookmarksView(search: search, selection: $bookmarkSelection, onOpen: onOpen)
 			}
 			if model.job != nil || model.downloads.hasTickets || model.skippedCount > 0 {
@@ -96,7 +98,7 @@ struct LibraryView: View {
 				LibraryStatusBar()
 			}
 		}
-		.searchable(text: $search, placement: .toolbar, prompt: scope == .comics ? "Search Comics" : "Search Bookmarks")
+		.searchable(text: $search, placement: .toolbar, prompt: scope == .bookmarks ? "Search Bookmarks" : "Search Comics")
 		.toolbar { toolbar }
 		.navigationTitle("Library")
 		.navigationSubtitle(subtitle)
@@ -104,7 +106,7 @@ struct LibraryView: View {
 			// For a bookmark, the comic it belongs to, opened on its page.
 			Group {
 				switch scope {
-				case .comics:
+				case .recents, .comics:
 					ComicDetailPane(book: selectedBook, onOpen: { onOpen($0, nil) })
 				case .bookmarks:
 					let mark = bookmarkSelection.flatMap { id in allBookmarks.first { $0.id == id } }
@@ -148,6 +150,12 @@ struct LibraryView: View {
 	// MARK: Filtering and sorting
 
 	private var visibleBooks: [ComicBook] {
+		// Recents has one order of its own and no filter: what was opened, the latest first.
+		if scope == .recents {
+			return books
+				.filter { $0.dateOpened != nil && $0.matches(searchQuery: search) }
+				.sorted { $0.dateOpened! > $1.dateOpened! }
+		}
 		var result = books.filter { book in
 			switch filter {
 			case .all: break
@@ -182,7 +190,10 @@ struct LibraryView: View {
 			LibraryEmptyView()
 		} else {
 			let visible = visibleBooks
-			if visible.isEmpty {
+			if visible.isEmpty, scope == .recents, search.isEmpty {
+				ContentUnavailableView("No Recent Comics", systemImage: "clock",
+									   description: Text("Comics you open show up here."))
+			} else if visible.isEmpty {
 				ContentUnavailableView.search(text: search)
 			} else {
 				grid(visible)
@@ -295,6 +306,12 @@ struct LibraryView: View {
 		Divider()
 		Button(book.isFavorite ? "Remove from Favorites" : "Add to Favorites") { model.toggleFavorite(book) }
 		Button(book.isRead ? "Mark as Unread" : "Mark as Read") { model.toggleRead(book) }
+		if scope == .recents {
+			Button("Remove from Recents") {
+				selectNeighbour(of: book.id)
+				model.removeFromRecents(book)
+			}
+		}
 		Divider()
 		Button("Show in Finder") { model.revealInFinder(book) }
 		if book.isFolderBacked {
@@ -314,6 +331,7 @@ struct LibraryView: View {
 	private var toolbar: some ToolbarContent {
 		ToolbarItem(placement: .principal) {
 			Picker("Show", selection: $scope) {
+				Text("Recents").tag(LibraryScope.recents)
 				Text("Comics").tag(LibraryScope.comics)
 				Text("Bookmarks").tag(LibraryScope.bookmarks)
 			}
@@ -321,6 +339,13 @@ struct LibraryView: View {
 			.labelsHidden()
 		}
 		ToolbarItemGroup(placement: .primaryAction) {
+			if scope == .recents {
+				Button { model.clearRecents() } label: {
+					Label("Clear Recents", systemImage: "clock.badge.xmark")
+				}
+				.help("Clear the list of recent comics. The comics stay in the library.")
+				.disabled(!books.contains { $0.dateOpened != nil })
+			}
 			if scope == .comics {
 				Menu {
 					Picker("Show", selection: $filter) {
@@ -338,7 +363,8 @@ struct LibraryView: View {
 						  : "line.3.horizontal.decrease.circle.fill")
 				}
 				.help("Filter and sort the library")
-
+			}
+			if scope != .bookmarks {
 				Slider(value: $columnWidth, in: LibraryMetrics.columnWidths)
 					.frame(width: 90)
 					.help("Cover size")

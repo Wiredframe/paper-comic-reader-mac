@@ -303,6 +303,20 @@ final class AppModel {
 		try? context.save()
 	}
 
+	/// Drops a comic from Recents by forgetting when it was last opened. Its progress, bookmarks
+	/// and open count stay as they are.
+	func removeFromRecents(_ book: ComicBook) {
+		book.dateOpened = nil
+		try? context.save()
+	}
+
+	/// Empties Recents. Only the open dates go; the comics and everything about them stay.
+	func clearRecents() {
+		let opened = (try? context.fetch(FetchDescriptor<ComicBook>(predicate: #Predicate { $0.dateOpened != nil }))) ?? []
+		for book in opened { book.dateOpened = nil }
+		try? context.save()
+	}
+
 	func revealInFinder(_ book: ComicBook) {
 		guard let relativePath = book.sourceRelativePath else {
 			NSWorkspace.shared.activateFileViewerSelecting([book.archiveURL])
