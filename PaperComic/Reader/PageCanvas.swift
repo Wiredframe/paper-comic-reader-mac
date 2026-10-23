@@ -190,6 +190,25 @@ final class PageCanvasView: NSView {
 		if let first = pages.first { store.prefetch(around: first) }
 	}
 
+	/// Shapes read from the image headers ahead of decoding. A decoded image's own shape wins;
+	/// a header for a page on screen lays it out again at once.
+	func aspectsArrived(_ batch: [Int: CGFloat]) {
+		var changed = false
+		for (page, aspect) in batch where aspects[page] == nil {
+			aspects[page] = aspect
+			if pageViews.contains(where: { $0.page == page }) { changed = true }
+		}
+		if changed { layoutSpread() }
+	}
+
+	/// The shape to assume for a page not seen yet: the one most pages so far have had, since a
+	/// comic's pages are nearly all alike, or a typical comic page before any is known.
+	private var typicalAspect: CGFloat {
+		guard !aspects.isEmpty else { return 0.66 }
+		let sorted = aspects.values.sorted()
+		return sorted[sorted.count / 2]
+	}
+
 	/// Notes a page's shape; true when it differs from what the layout assumed.
 	@discardableResult
 	private func remember(_ image: CGImage, for page: Int) -> Bool {
@@ -217,7 +236,8 @@ final class PageCanvasView: NSView {
 		let visible = scrollView.contentSize
 		guard visible.width > 1, visible.height > 1, !pageViews.isEmpty else { return }
 
-		let shapes = pageViews.map { aspects[$0.page] ?? 0.66 }
+		let fallback = typicalAspect
+		let shapes = pageViews.map { aspects[$0.page] ?? fallback }
 		let unitWidth = shapes.reduce(0, +)   // total width at height 1
 		let height: CGFloat
 		switch state.fit {

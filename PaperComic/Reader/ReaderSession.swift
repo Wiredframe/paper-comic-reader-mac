@@ -121,6 +121,10 @@ final class ReaderSession {
 		// The file may not be page for page what the library recorded (replaced, re-scanned).
 		if book.pageCount != opened.pageCount { book.pageCount = opened.pageCount }
 		anchorPage = min(max(initialPage ?? book.lastReadPage, 0), opened.pageCount - 1)
+		// The first spread's shapes before anything is shown: otherwise its pages are laid out
+		// as a guess and jump (and the window with them) once their images are decoded.
+		await opened.readAspects(of: Array(anchorPage - 2...anchorPage + 3))
+		guard !isClosed else { return }
 		widePages = Set(opened.knownAspects().filter { $0.value > 1.05 }.keys)
 		rebuildPaging()
 		gate.opened(at: anchorPage)
@@ -130,6 +134,8 @@ final class ReaderSession {
 		// of its own. Cheap on a local file, and done long before the reader gets there.
 		opened.scanAspects(from: anchorPage) { [weak self] batch in
 			guard let self else { return }
+			// A page ahead gets its real shape now, not when it is decoded on the way there.
+			self.canvas.view?.aspectsArrived(batch)
 			let wide = Set(batch.filter { $0.value > 1.05 }.keys)
 			guard !wide.isSubset(of: self.widePages) else { return }
 			self.widePages.formUnion(wide)

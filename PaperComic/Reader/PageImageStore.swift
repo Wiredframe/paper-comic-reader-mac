@@ -205,6 +205,28 @@ final class PageImageStore: @unchecked Sendable {
         scanAspects(order.filter { known[$0] == nil }[...], onBatch: onBatch)
     }
 
+    /// Reads the shapes of `pages` from their image headers now, ahead of everything else on
+    /// the decode queue, and returns once they are known. The reader opens with this for the
+    /// first spread, so its pages are paired and sized right before anything is shown.
+    func readAspects(of pages: [Int]) async {
+        let known = knownAspects()
+        let wanted = pages.filter { (0..<pageCount).contains($0) && known[$0] == nil }
+        guard !wanted.isEmpty else { return }
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            work.async { [weak self] in
+                defer { continuation.resume() }
+                guard let self, let archive = self.archive else { return }
+                var found: [Int: CGFloat] = [:]
+                for page in wanted {
+                    if let aspect = archive.pageAspect(at: page) { found[page] = aspect }
+                }
+                self.aspectLock.lock()
+                self.aspectCache.merge(found) { old, _ in old }
+                self.aspectLock.unlock()
+            }
+        }
+    }
+
     private static let aspectBatch = 8
 
     private func scanAspects(_ remaining: ArraySlice<Int>, onBatch: @escaping @MainActor ([Int: CGFloat]) -> Void) {
