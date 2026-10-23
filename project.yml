@@ -34,8 +34,8 @@ schemes:
 settings:
   base:
     SWIFT_VERSION: "5.0"
-    MARKETING_VERSION: "3.0.2"
-    CURRENT_PROJECT_VERSION: "3"
+    MARKETING_VERSION: "3.0.3"
+    CURRENT_PROJECT_VERSION: "4"
     # Ad-hoc signed and not notarised, on purpose (see scripts/release.sh).
     CODE_SIGN_IDENTITY: "-"
     CODE_SIGN_STYLE: Manual
