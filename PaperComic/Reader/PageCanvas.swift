@@ -510,11 +510,12 @@ private final class PageView: NSView {
 		if liveTextEnabled {
 			if overlay == nil {
 				let overlay = ImageAnalysisOverlayView()
-				// Text selection explicitly: `.automaticTextOnly` leaves the selection view waiting for a
-				// Live Text button that is hidden here, so a drag across text did nothing.
+				// Text selection only: with the Live Text button hidden there is no other way in, and
+				// nothing else (subjects, Visual Look Up) should claim drags on the art.
 				overlay.preferredInteractionTypes = .textSelection
 				// Selecting text is enough; the Live Text button in the corner would sit on the art.
 				overlay.isSupplementaryInterfaceHidden = true
+				overlay.delegate = self
 				overlay.autoresizingMask = [.width, .height]
 				overlay.frame = bounds
 				addSubview(overlay)
@@ -553,10 +554,30 @@ private final class PageView: NSView {
 	override func hitTest(_ point: NSPoint) -> NSView? {
 		guard let overlay, liveTextEnabled else { return nil }
 		let local = convert(point, from: superview)
-		if overlay.hasInteractiveItem(at: convert(local, to: overlay)) || overlay.hasActiveTextSelection {
+		var inOverlay = convert(local, to: overlay)
+		// VisionKit's `has…(at:)` checks count from the top left although the overlay is not
+		// flipped (macOS 27, reproduced with a bare overlay), so unflipped they test the spot
+		// mirrored top to bottom and text in the middle of a page could not be selected.
+		if !overlay.isFlipped { inOverlay.y = overlay.bounds.height - inOverlay.y }
+		if overlay.hasInteractiveItem(at: inOverlay) || overlay.hasActiveTextSelection {
 			return super.hitTest(point)
 		}
 		return nil
+	}
+}
+
+extension PageView: ImageAnalysisOverlayViewDelegate {
+	/// "Look Up “PERCIO HO DECISO…”" becomes "Look Up": the menu belongs to the selection, it
+	/// needn't quote it back.
+	func overlayView(_ overlayView: ImageAnalysisOverlayView, updatedMenuFor menu: NSMenu,
+					 for event: NSEvent, at point: CGPoint) -> NSMenu {
+		for item in menu.items {
+			let title = item.title.replacing(#/\s*[„“”"«»][^„“”"«»]*[“”"«»]\s*/#, with: " ")
+				.trimmingCharacters(in: .whitespaces)
+			guard title != item.title, let first = title.first else { continue }
+			item.title = first.uppercased() + title.dropFirst()
+		}
+		return menu
 	}
 }
 
