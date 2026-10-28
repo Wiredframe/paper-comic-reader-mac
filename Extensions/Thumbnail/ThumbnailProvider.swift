@@ -44,10 +44,13 @@ final class ThumbnailProvider: QLThumbnailProvider {
             // Reply sized to the cover's aspect (not the full box), so QuickLook frames
             // the page edge-to-edge instead of letterboxing it onto a padded canvas.
             // Mac port: the cover is a CGImage, drawn into the reply's own CGContext.
+            // That context is in device pixels (size × scale) with no scale transform,
+            // so fill its real bounds; drawing in points left the cover in one corner.
             let size = Self.aspectFit(CGSize(width: cover.width, height: cover.height),
                                       within: request.maximumSize)
             let reply = QLThumbnailReply(contextSize: size) { context in
-                context.draw(cover, in: CGRect(origin: .zero, size: size))
+                context.interpolationQuality = .high
+                context.draw(cover, in: CGRect(x: 0, y: 0, width: context.width, height: context.height))
                 return true
             }
             handler(reply, nil)
