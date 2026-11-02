@@ -42,6 +42,12 @@ cask "paper-comic-reader" do
   end
 
   zap trash: [
+    "~/Library/Application Scripts/de.wiredframe.comicreader",
+    "~/Library/Application Scripts/de.wiredframe.comicreader.thumbnail",
+    "~/Library/Containers/de.wiredframe.comicreader",
+    "~/Library/Containers/de.wiredframe.comicreader.thumbnail",
+    "~/Library/Saved Application State/de.wiredframe.comicreader.savedState",
+    # Up to 3.0.x the app ran as de.wiredframe.simplecomic.
     "~/Library/Application Scripts/de.wiredframe.simplecomic",
     "~/Library/Application Scripts/de.wiredframe.simplecomic.thumbnails",
     "~/Library/Containers/de.wiredframe.simplecomic",

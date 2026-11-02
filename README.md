@@ -104,7 +104,7 @@ xcodegen generate
 xcodebuild -project PaperComicReader.xcodeproj -scheme "Paper Comic Reader" build
 ```
 
-Debug builds use the bundle id `de.wiredframe.simplecomic.dev` and so a library of their own; only
+Debug builds use the bundle id `de.wiredframe.comicreader.dev` and so a library of their own; only
 Release builds see the real one. `xcodebuild … test` runs the unit tests, which never touch a
 library at all. `scripts/release.sh` builds a universal Release configuration, packs it and prints
 the SHA-256 the cask needs.

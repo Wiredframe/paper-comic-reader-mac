@@ -67,9 +67,10 @@ targets:
     settings:
       base:
         PRODUCT_NAME: "Paper Comic Reader"
-        # Unchanged from the Simple Comic fork on purpose: the sandbox container belongs to the
-        # bundle id, and a new one would leave the existing library behind, out of reach.
-        PRODUCT_BUNDLE_IDENTIFIER: de.wiredframe.simplecomic
+        # The iOS app's bundle id, so the App Store lists both as one Universal Purchase.
+        # Up to 3.0.x the Mac app was de.wiredframe.simplecomic; its library stays in that old
+        # sandbox container and moves over once by backup export and import.
+        PRODUCT_BUNDLE_IDENTIFIER: de.wiredframe.comicreader
         INFOPLIST_FILE: PaperComic/App/Info.plist
         CODE_SIGN_ENTITLEMENTS: PaperComic/App/PaperComic.entitlements
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
@@ -80,7 +81,7 @@ targets:
       # library. Release keeps the real id.
       configs:
         Debug:
-          PRODUCT_BUNDLE_IDENTIFIER: de.wiredframe.simplecomic.dev
+          PRODUCT_BUNDLE_IDENTIFIER: de.wiredframe.comicreader.dev
 
   Paper Comic Thumbnails:
     type: app-extension
@@ -96,13 +97,13 @@ targets:
       - path: PaperComic/Core/ImageDownsampler.swift
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: de.wiredframe.simplecomic.thumbnails
+        PRODUCT_BUNDLE_IDENTIFIER: de.wiredframe.comicreader.thumbnail
         INFOPLIST_FILE: Extensions/Thumbnail/Info.plist
         CODE_SIGN_ENTITLEMENTS: Extensions/Thumbnail/Thumbnail.entitlements
         LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/../Frameworks @executable_path/../../../../Frameworks"
       configs:
         Debug:
-          PRODUCT_BUNDLE_IDENTIFIER: de.wiredframe.simplecomic.dev.thumbnails
+          PRODUCT_BUNDLE_IDENTIFIER: de.wiredframe.comicreader.dev.thumbnail
 
   # Unit tests compile the core sources straight in rather than loading the app: a hosted test
   # would launch the app with its real bundle id, and with it the real sandbox container and
@@ -121,5 +122,5 @@ targets:
       - path: PaperComic/Reader/PageImageStore.swift
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: de.wiredframe.papercomic.tests
+        PRODUCT_BUNDLE_IDENTIFIER: de.wiredframe.comicreader.mactests
         GENERATE_INFOPLIST_FILE: YES
