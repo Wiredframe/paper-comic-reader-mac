@@ -7,8 +7,9 @@
 # `Casks/paper-comic-reader.rb`) and is kept here so it ships with the source it describes. After a
 # release, update `version` and `sha256` from the release notes and push the tap.
 #
-# It replaces the `simple-comic-paper` cask: the app was Simple Comic with a paper effect until 3.0,
-# and keeps that app's bundle id, so the library and settings carry over. The tap's
+# It replaces the `simple-comic-paper` cask: the app was Simple Comic with a paper effect until 3.0.
+# Since 3.1 it shares the iOS app's bundle id (App Store Universal Purchase), so the library of
+# 3.0.x moves over once by backup export and import. The tap's
 # `cask_renames.json` maps the old token onto this one, so `brew upgrade` moves people across.
 # No `conflicts_with` for the old token: through the rename it resolves to this cask itself, and
 # Homebrew then refuses to install it ("conflicts with 'paper-comic-reader'").
@@ -21,7 +22,7 @@
 # workflow writes, not from a local build, since two builds do not produce byte-identical zips.
 
 cask "paper-comic-reader" do
-  version "3.0.6"
+  version "3.1.0"
   sha256 "fe5b2c480cd5d739904a61466e5bbc111dba87ce2c6962e5fab1afc6c7747959"
 
   url "https://github.com/Wiredframe/paper-comic-reader-mac/releases/download/v#{version}/Paper-Comic-Reader-#{version}.zip"
