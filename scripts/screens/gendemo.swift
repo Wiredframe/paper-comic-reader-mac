@@ -8,6 +8,10 @@
 //
 //   swift scripts/screens/gendemo.swift <out-dir>
 //
+// GENDEMO_ONLY="Solar Flare,Deep Blue" limits the run to those series, GENDEMO_QUALITY=0.7 sets the
+// JPEG quality (default 0.85). The app's bundled sample comics (PaperComic/Resources/SampleComics)
+// are made with `GENDEMO_ONLY=… GENDEMO_QUALITY=0.6 GENDEMO_SCALE=0.6`.
+//
 import AppKit
 
 let outDir = URL(fileURLWithPath: CommandLine.arguments.count > 1 ? CommandLine.arguments[1] : ".")
@@ -139,9 +143,12 @@ func draw(_ s: String, centeredAt p: NSPoint, _ f: NSFont, _ c: NSColor, maxWidt
 }
 
 func bitmap(_ w: Double, _ h: Double, _ body: () -> Void) -> NSBitmapImageRep {
-	let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int(w), pixelsHigh: Int(h),
+	// Drawn in 1600×2400 points; GENDEMO_SCALE renders them at fewer pixels.
+	let scale = ProcessInfo.processInfo.environment["GENDEMO_SCALE"].flatMap(Double.init) ?? 1
+	let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int(w * scale), pixelsHigh: Int(h * scale),
 							   bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
 							   colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
+	rep.size = NSSize(width: w, height: h)
 	NSGraphicsContext.saveGraphicsState()
 	NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
 	body()
@@ -359,11 +366,14 @@ func comicInfo(_ d: Demo) -> String {
 
 func png(_ rep: NSBitmapImageRep) -> Data {
 	// JPEG keeps the archives small; the pages are flat colour and survive it well.
-	rep.representation(using: .jpeg, properties: [.compressionFactor: 0.85])!
+	rep.representation(using: .jpeg, properties: [.compressionFactor: quality])!
 }
 
+let env = ProcessInfo.processInfo.environment
+let quality = env["GENDEMO_QUALITY"].flatMap(Double.init) ?? 0.85
+let only = env["GENDEMO_ONLY"].map { Set($0.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }) }
 let fm = FileManager.default
-for d in demos {
+for d in demos where only?.contains(d.series) ?? true {
 	let work = fm.temporaryDirectory.appendingPathComponent("gendemo-\(UUID().uuidString)")
 	try fm.createDirectory(at: work, withIntermediateDirectories: true)
 	try png(renderCover(d)).write(to: work.appendingPathComponent("000.jpg"))

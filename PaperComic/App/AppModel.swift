@@ -97,6 +97,7 @@ final class AppModel {
 		BackupDevice.refreshName()
 		if !isTemporaryStore {
 			LegacyMigration.runIfNeeded(into: container.mainContext)
+			SampleLibrary.seedIfNeeded(into: container.mainContext)
 		}
 		offersRecovery = !isTemporaryStore && LibraryReset.isPending
 		if isTemporaryStore {

@@ -35,7 +35,7 @@ settings:
   base:
     SWIFT_VERSION: "5.0"
     MARKETING_VERSION: "3.1.1"
-    CURRENT_PROJECT_VERSION: "10"
+    CURRENT_PROJECT_VERSION: "11"
     # Ad-hoc signed and not notarised, on purpose (see scripts/release.sh).
     CODE_SIGN_IDENTITY: "-"
     CODE_SIGN_STYLE: Manual
@@ -60,6 +60,11 @@ targets:
           - "App/Info.plist"
           - "App/PaperComic.entitlements"
           - "Resources/AppIcon.icon"
+          - "Resources/SampleComics"
+      # First-launch sample comics (see SampleLibrary), copied as a folder so they stay together.
+      - path: PaperComic/Resources/SampleComics
+        type: folder
+        buildPhase: resources
       # The same Icon Composer icon as the iOS app, referenced as one file so actool compiles it.
       - path: PaperComic/Resources/AppIcon.icon
         type: file
