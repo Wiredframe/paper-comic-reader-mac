@@ -55,6 +55,7 @@ private struct LibrarySettings: View {
 				}
 				HStack {
 					Button("Choose…") { model.chooseLibraryFolder() }
+						.disabled(model.job != nil)
 					Button("Scan Now") { Task { await model.scanLibraryFolder() } }
 						.disabled(model.job != nil || !LibrarySource.isConfigured)
 				}
@@ -67,9 +68,7 @@ private struct LibrarySettings: View {
 				Button("Remove All Downloads…") { confirmsRemoval = true }
 					.confirmationDialog("Remove all downloaded comics from this Mac?", isPresented: $confirmsRemoval) {
 						Button("Remove Downloads", role: .destructive) {
-							for book in books where book.isFolderBacked && !book.isRemote {
-								model.evict(book)
-							}
+							model.evict(books.filter { $0.isFolderBacked && !$0.isRemote })
 							refreshStorage()
 						}
 					} message: {

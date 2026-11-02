@@ -254,11 +254,11 @@ enum Importer {
     /// stays in the library marked "not downloaded". The page-grid thumbnails go too (regenerable,
     /// and stale for a re-download); bookmarks stay — their shots live in Storage.bookmarkThumbs,
     /// independent of the archive.
-    @MainActor static func evictDownload(_ book: ComicBook, from context: ModelContext) {
+    @MainActor static func evictDownload(_ book: ComicBook, from context: ModelContext, save: Bool = true) {
         try? Storage.fm.removeItem(at: book.archiveURL)
         try? Storage.fm.removeItem(at: Storage.pageThumbs(for: book.id))
         book.hasLocalArchive = false
-        try? context.save()
+        if save { try? context.save() }
     }
 
     // A fire-and-forget `prefetch` used to live here for the library's "Download" menu item: an
@@ -688,8 +688,15 @@ enum Importer {
     /// next scan of the folder doesn't bring the entry straight back.
     @MainActor static func delete(_ book: ComicBook, from context: ModelContext) {
         if let relativePath = book.sourceRelativePath { LibrarySource.exclude(relativePath) }
-        try? Storage.fm.removeItem(at: book.archiveURL)
-        if let cover = book.coverURL { try? Storage.fm.removeItem(at: cover) }
+        // Files another entry still points at stay: two entries must never share them, but an
+        // older restore may have left a pair that does, and deleting one must not break the other.
+        let others = ((try? context.fetch(FetchDescriptor<ComicBook>())) ?? []).filter { $0.id != book.id }
+        if !others.contains(where: { $0.fileName == book.fileName }) {
+            try? Storage.fm.removeItem(at: book.archiveURL)
+        }
+        if let cover = book.coverURL, !others.contains(where: { $0.coverName == book.coverName }) {
+            try? Storage.fm.removeItem(at: cover)
+        }
         for bookmark in book.bookmarks {
             try? Storage.fm.removeItem(at: bookmark.thumbURL)
         }

@@ -2197,6 +2197,22 @@
         }
       }
     },
+    "Paper Comic Reader Website": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Website von Paper Comic Reader"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sito web di Paper Comic Reader"
+          }
+        }
+      }
+    },
     "Paper Effect": {
       "localizations": {
         "de": {

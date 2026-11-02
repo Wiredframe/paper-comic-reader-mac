@@ -262,6 +262,36 @@ final class LibraryBackupTests: XCTestCase {
         XCTAssertEqual(restored.lastReadPage, 11)
     }
 
+    /// A comic that no longer matches its backup entry (here its page count changed after a
+    /// relink) comes back as a second entry, and that entry must own its files: sharing the
+    /// UUID-named archive and cover would let deleting one entry break the other.
+    func testRestoredDuplicateGetsFilesOfItsOwn() throws {
+        let source = try makeContext()
+        let original = insertOwned(source)
+        let unpacked = try roundTrip([original])
+
+        let target = try makeContext()
+        LibraryBackupStore.restore(unpacked, into: target)
+        let first = try XCTUnwrap(target.fetch(FetchDescriptor<ComicBook>()).first)
+        first.pageCount = 31
+        LibraryBackupStore.restore(unpacked, into: target)
+
+        let books = try target.fetch(FetchDescriptor<ComicBook>())
+        XCTAssertEqual(books.count, 2)
+        for book in books {
+            written.append(book.archiveURL)
+            if let cover = book.coverURL { written.append(cover) }
+        }
+        let second = try XCTUnwrap(books.first { $0.id != first.id })
+        XCTAssertNotEqual(second.fileName, first.fileName)
+        XCTAssertNotEqual(second.coverName, first.coverName)
+        XCTAssertTrue(second.hasLocalArchive)
+
+        Importer.delete(second, from: target)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: first.archiveURL.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: try XCTUnwrap(first.coverURL).path))
+    }
+
     /// Two local comics sharing an identity are left alone entirely. Writing one comic's progress
     /// and bookmarks onto both would be a quiet, permanent mix-up; not restoring them is not.
     func testAmbiguousIdentityIsSkipped() throws {

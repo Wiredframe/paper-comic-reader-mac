@@ -191,12 +191,25 @@ enum LibraryBackupStore {
     private static func create(_ comic: LibraryBackup.Comic,
                                from unpacked: LibraryBackupArchive.Unpacked,
                                in context: ModelContext) -> ComicBook {
+        // A comic whose title or page count changed here since the backup was made doesn't match
+        // its entry by key, yet still owns the same UUID-named files. Sharing them would let
+        // deleting one entry remove the other's archive and cover, so the new entry gets names of
+        // its own and copies of what the backup carries.
+        let fileName = ownName(comic.fileName, in: context, taken: \.fileName) { old, new in
+            guard comic.archiveIncluded else { return }
+            copy(unpacked.archiveURL(old), to: Storage.comicURL(new))
+        }
+        let coverName = comic.coverName.map { cover in
+            ownName(cover, in: context, taken: \.coverName) { old, new in
+                copy(unpacked.coverURL(old), to: Storage.coverURL(new))
+            }
+        }
         let book = ComicBook(title: comic.title,
-                             fileName: comic.fileName,
+                             fileName: fileName,
                              pageCount: comic.pageCount,
                              // Only claim a cover that actually arrived, so a restored grid shows
                              // its placeholder rather than an empty frame.
-                             coverName: comic.coverName.flatMap {
+                             coverName: coverName.flatMap {
                                  Storage.fm.fileExists(atPath: Storage.coverURL($0).path) ? $0 : nil
                              },
                              coverAspect: comic.coverAspect)
@@ -209,12 +222,32 @@ enum LibraryBackupStore {
         // owned copy this is the difference between a comic and an entry that can't be opened, so
         // it is read off the file system rather than trusted from the document.
         book.hasLocalArchive = comic.archiveIncluded
-            && Storage.fm.fileExists(atPath: Storage.comicURL(comic.fileName).path)
+            && Storage.fm.fileExists(atPath: Storage.comicURL(fileName).path)
 
         apply(comic, to: book)
         applyMetadata(comic, to: book)
         addBookmarks(comic.bookmarks, to: book, in: context)
         return book
+    }
+
+    /// `name` when no comic in the library uses it yet; otherwise a fresh UUID name with the same
+    /// extension, after `install` has put a copy of the file there.
+    private static func ownName<Value>(_ name: String, in context: ModelContext,
+                                       taken key: KeyPath<ComicBook, Value>,
+                                       install: (_ old: String, _ new: String) -> Void) -> String {
+        let books = (try? context.fetch(FetchDescriptor<ComicBook>())) ?? []
+        let inUse = books.contains { book in
+            switch book[keyPath: key] {
+            case let value as String: value == name
+            case let value as String?: value == name
+            default: false
+            }
+        }
+        guard inUse else { return name }
+        let ext = (name as NSString).pathExtension
+        let fresh = ext.isEmpty ? UUID().uuidString : "\(UUID().uuidString).\(ext)"
+        install(name, fresh)
+        return fresh
     }
 
     /// Overwrites an existing comic's reading state from the backup, and returns how many bookmarks

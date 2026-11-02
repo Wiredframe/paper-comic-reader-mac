@@ -4,8 +4,8 @@
 //
 //  A QuickLook thumbnail extension: it draws a CBZ's cover (its first page) so the
 //  Finder, Spotlight and Quick Look show the actual comic instead of the generic
-//  ZIP icon. Registered for our exported `de.wiredframe.comicreader.cbz` type, so
-//  the system calls it for every .cbz — wherever it lives, imported or not.
+//  ZIP icon. Registered for our exported `de.wiredframe.comicreader.cbz` type and the
+//  other apps' CBZ types, so the system calls it for every .cbz, imported or not.
 //
 //  Extensions run in a tight-memory process, so we reuse the same on-demand decode
 //  the app relies on: ComicArchive seeks to a single entry (never inflates the whole

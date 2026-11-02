@@ -78,5 +78,8 @@ private struct PageThumbnail: View {
 		.task(id: page) {
 			image = await session.store?.thumbnail(at: page, maxPixel: PageImageStore.gridThumbPixelSizes[1])
 		}
+		// LazyVGrid keeps the state of every cell it has built, so a long scroll would otherwise
+		// hold every thumbnail it passed. They are cached on disk and come back cheaply.
+		.onDisappear { image = nil }
 	}
 }

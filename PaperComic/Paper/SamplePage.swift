@@ -30,7 +30,7 @@ enum SamplePage {
             // Solid black title panel (tests deep blacks + show-through).
             NSColor.black.setFill()
             cg.fill(rect(0.07, 0.08, 0.86, 0.17))
-            ("COMIC READER" as NSString).draw(
+            ("PAPER COMIC" as NSString).draw(
                 in: rect(0.10, 0.12, 0.80, 0.09),
                 withAttributes: [.font: NSFont.boldSystemFont(ofSize: h * 0.045),
                                  .foregroundColor: NSColor.white])

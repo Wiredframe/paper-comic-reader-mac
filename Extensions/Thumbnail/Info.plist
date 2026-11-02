@@ -30,6 +30,7 @@
 		<dict>
 			<key>QLSupportedContentTypes</key>
 			<array>
+				<string>de.wiredframe.comicreader.cbz</string>
 				<string>cx.c3.cbz-archive</string>
 				<string>public.cbz-archive</string>
 				<string>com.simplecomic.cbz-archive</string>

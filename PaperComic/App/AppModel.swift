@@ -119,6 +119,8 @@ final class AppModel {
 	/// Asks for the library folder and scans it. Choosing a different folder lets every comic
 	/// that was removed from the old one back in, because its paths now mean other files.
 	func chooseLibraryFolder() {
+		// A scan in progress would carry on with the old folder's comics under the new one.
+		guard job == nil else { return }
 		let panel = NSOpenPanel()
 		panel.canChooseDirectories = true
 		panel.canChooseFiles = false
@@ -292,6 +294,16 @@ final class AppModel {
 		Importer.evictDownload(book, from: context)
 	}
 
+	/// Removes many downloads with one save, so a large library doesn't republish every query
+	/// once per comic.
+	func evict(_ books: [ComicBook]) {
+		for book in books {
+			downloads.cancel(book.id)
+			Importer.evictDownload(book, from: context, save: false)
+		}
+		try? context.save()
+	}
+
 	func toggleFavorite(_ book: ComicBook) {
 		book.isFavorite.toggle()
 		try? context.save()
@@ -350,10 +362,13 @@ final class AppModel {
 					let packed = try LibraryBackupArchive.write(backup) { done, total in
 						Task { @MainActor in self.job = Job(title: String(localized: "Exporting Library"), done: done, total: total) }
 					}
+					// Replaces an existing file only once the new one is in place, so a copy that
+					// fails on a full or remote disk leaves last week's backup where it was.
 					if FileManager.default.fileExists(atPath: destination.path) {
-						try FileManager.default.removeItem(at: destination)
+						_ = try FileManager.default.replaceItemAt(destination, withItemAt: packed)
+					} else {
+						try FileManager.default.moveItem(at: packed, to: destination)
 					}
-					try FileManager.default.moveItem(at: packed, to: destination)
 				}
 			}.value
 			job = nil

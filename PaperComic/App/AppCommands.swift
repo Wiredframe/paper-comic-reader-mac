@@ -20,6 +20,7 @@ struct AppCommands: Commands {
 				.keyboardShortcut("o")
 			Divider()
 			Button("Choose Library Folder…") { model.chooseLibraryFolder() }
+				.disabled(model.job != nil)
 			Button("Scan Library Folder") { Task { await model.scanLibraryFolder() } }
 				.keyboardShortcut("r")
 				.disabled(model.job != nil || !LibrarySource.isConfigured)
@@ -43,13 +44,13 @@ struct AppCommands: Commands {
 			Divider()
 			Button("Zoom In") { session?.canvas.view?.zoomIn(nil) }
 				.keyboardShortcut("+")
-				.disabled(session == nil)
+				.disabled(session?.phase != .ready)
 			Button("Zoom Out") { session?.canvas.view?.zoomOut(nil) }
 				.keyboardShortcut("-")
-				.disabled(session == nil)
+				.disabled(session?.phase != .ready)
 			Button("Actual Size") { session?.canvas.view?.zoomToActualFit(nil) }
 				.keyboardShortcut("0")
-				.disabled(session == nil)
+				.disabled(session?.phase != .ready)
 			Divider()
 			Toggle("Paper Effect", isOn: Binding(get: { model.paper.isEnabled }, set: { model.paper.isEnabled = $0 }))
 				.keyboardShortcut("p", modifiers: [.command, .shift])
@@ -66,10 +67,10 @@ struct AppCommands: Commands {
 				.disabled(!(session?.canGoPrevious ?? false))
 			Button("First Page") { session?.first() }
 				.keyboardShortcut(.upArrow, modifiers: .command)
-				.disabled(session == nil)
+				.disabled(session?.phase != .ready || !(session?.canGoPrevious ?? false))
 			Button("Last Page") { session?.last() }
 				.keyboardShortcut(.downArrow, modifiers: .command)
-				.disabled(session == nil)
+				.disabled(session?.phase != .ready || !(session?.canGoNext ?? false))
 			Divider()
 			Button("Bookmark Page") { session?.toggleBookmark() }
 				.keyboardShortcut("d")
@@ -80,6 +81,13 @@ struct AppCommands: Commands {
 				.disabled(window?.leaveReader == nil)
 			Button("New Library Tab") { window?.newTab() }
 				.keyboardShortcut("t")
+		}
+
+		// No help book: the item would only say that help isn't available. The landing page is
+		// where help lives.
+		CommandGroup(replacing: .help) {
+			Link("Paper Comic Reader Website",
+				 destination: URL(string: "https://wiredframe.github.io/paper-comic-reader-landingpage/")!)
 		}
 	}
 
