@@ -50,6 +50,14 @@ xcodebuild archive -project "$PROJECT" -scheme "$SCHEME" -configuration Release 
 	DEPLOYMENT_POSTPROCESSING=YES \
 	-allowProvisioningUpdates
 
+# SwiftPM resource bundles (ZIPFoundation's privacy manifest) come out of the archive signed with
+# the development certificate, and the export does not re-sign them, which App Store Connect
+# rejects (ITMS-90284). They hold no code, so they go in unsigned: the app's own signature seals
+# their files, and the export re-signs the app and its extension.
+find "$ARCHIVE/Products/Applications" -name "*.bundle" -path "*/Resources/*" -prune -print | while read -r bundle; do
+	rm -rf "$bundle/Contents/_CodeSignature" "$bundle/_CodeSignature"
+done
+
 echo "* 3/3  Export for App Store Connect"
 cat > "$OUT/ExportOptions.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
