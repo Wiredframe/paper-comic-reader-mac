@@ -10,18 +10,33 @@ import SwiftData
 
 struct SettingsView: View {
 	@Environment(AppModel.self) private var model
+	@State private var tab = SettingsView.debugValue("debugSettingsTab")
 
 	var body: some View {
-		TabView {
+		TabView(selection: $tab) {
 			LibrarySettings()
 				.tabItem { Label("Library", systemImage: "books.vertical") }
+				.tag(0)
 			ReadingSettings()
 				.tabItem { Label("Reading", systemImage: "book") }
+				.tag(1)
 			PaperSettingsView(settings: model.paper)
 				.tabItem { Label("Paper", systemImage: "doc.richtext") }
+				.tag(2)
 		}
 		.frame(width: 520)
-		.frame(minHeight: 420)
+		.frame(minHeight: max(420, CGFloat(SettingsView.debugValue("debugSettingsHeight"))))
+	}
+
+	/// Development only, for App Store screenshots: `-debugSettingsTab 2` opens on a given tab,
+	/// `-debugSettingsHeight 820` makes the window tall enough to show the whole Paper tab.
+	/// Always 0 in Release builds.
+	private static func debugValue(_ key: String) -> Int {
+		#if DEBUG
+		UserDefaults.standard.integer(forKey: key)
+		#else
+		0
+		#endif
 	}
 }
 

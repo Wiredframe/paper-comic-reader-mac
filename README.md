@@ -6,7 +6,13 @@
 
 <p align="center">
   A comic reader for the Mac that makes the page look printed.<br>
-  The Mac companion of Paper Comic on iPhone and iPad.
+  The Mac companion of <a href="https://github.com/Wiredframe/paper-comic-reader">Paper Comic Reader on iPhone and iPad</a>.
+</p>
+
+<p align="center">
+  <a href="https://apps.apple.com/app/paper-comic-reader/id6788421253"><b>App Store</b></a> ·
+  <a href="#install">Homebrew</a> ·
+  <a href="https://wiredframe.github.io/paper-comic-reader-landingpage/">Landing page</a>
 </p>
 
 ---
@@ -41,7 +47,7 @@ being copied.
 ### Moving a library between Mac, iPhone and iPad
 
 File › Export Library writes one `.zip` with reading progress, favorites, bookmarks and the comics
-you imported yourself. Paper Comic on iPhone and iPad reads the same file, and writes it too, so a
+you imported yourself. Paper Comic Reader on iPhone and iPad reads the same file, and writes it too, so a
 library moves either way. Comics from the library folder travel as references and are fetched from
 the folder on the other device.
 
@@ -59,12 +65,23 @@ Formats: CBZ (and plain ZIP archives of images), like the iOS app.
 ## Coming from Simple Comic
 
 Up to 2.0 this was a fork of [Simple Comic](https://github.com/MaddTheSane/Simple-Comic) with a
-paper effect and a library. 3.0 is a new app built on the core of the iOS app. It keeps Simple
-Comic's bundle id, so its library (folder, covers, downloads, reading positions, favorites) and the
-paper settings are taken over on first launch. The old files are copied, never moved. Comics in
-formats other than CBZ (CBR, CB7, CBT) are not taken over, since this app reads CBZ only.
+paper effect and a library. 3.0 is a new app built on the core of the iOS app. It kept Simple
+Comic's bundle id, so a Simple Comic library (folder, covers, downloads, reading positions,
+favorites) and the paper settings were taken over on first launch. The old files are copied, never
+moved. Comics in formats other than CBZ (CBR, CB7, CBT) are not taken over, since this app reads CBZ
+only.
+
+Since 3.1 the app shares its bundle id with the iOS app (`de.wiredframe.comicreader`), so the App
+Store can offer iPhone, iPad and Mac as one download. A new bundle id means a new sandbox
+container: to bring a 3.0.x library along, export it with File › Export Library in 3.0.x, then
+import that file in 3.1 and choose the library folder once more.
 
 ## Install
+
+**On the App Store:** [Paper Comic Reader](https://apps.apple.com/app/paper-comic-reader/id6788421253)
+is one free download for iPhone, iPad and Mac, signed and updated by the App Store.
+
+**With Homebrew:**
 
 ```
 brew tap wiredframe/tap

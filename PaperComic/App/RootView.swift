@@ -16,6 +16,7 @@ struct RootView: View {
 	@State private var session: ReaderSession?
 	@State private var didStart = false
 	@State private var window: NSWindow?
+	@Environment(\.openSettings) private var openSettings
 
 	var body: some View {
 		Group {
@@ -81,6 +82,23 @@ struct RootView: View {
 		}
 		#if DEBUG
 		snapshotIfAsked()
+		// Development only: `-debugWindowSize 1280x800` gives the window a fixed content size, for
+		// App Store screenshots of the same size in every language.
+		if let size = UserDefaults.standard.string(forKey: "debugWindowSize")?.split(separator: "x")
+			.compactMap({ Double($0) }), size.count == 2 {
+			DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+				window?.setContentSize(NSSize(width: size[0], height: size[1]))
+				window?.center()
+			}
+		}
+		// Development only: `-debugDarkMode YES` switches the app to dark mode, whatever the system's.
+		if UserDefaults.standard.bool(forKey: "debugDarkMode") { NSApp.appearance = NSAppearance(named: .darkAqua) }
+		// Development only: `-debugOpenSettings YES` opens the Settings window at launch.
+		if UserDefaults.standard.bool(forKey: "debugOpenSettings") {
+			DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+				openSettings()
+			}
+		}
 		// Development only: `-debugOpenComic <uuid>` opens a comic at launch, so the reader can
 		// be checked from a script without clicking.
 		if let id = UserDefaults.standard.string(forKey: "debugOpenComic").flatMap(UUID.init),
