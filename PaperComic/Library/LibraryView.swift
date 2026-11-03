@@ -80,7 +80,6 @@ struct LibraryView: View {
 	@State private var selection: UUID?
 	@State private var bookmarkSelection: UUID?
 	@Query private var allBookmarks: [Bookmark]
-	@State private var hovered: UUID?
 	@State private var pendingDeletion: ComicBook?
 	@FocusState private var gridFocused: Bool
 	@State private var didFocusGrid = false
@@ -88,9 +87,11 @@ struct LibraryView: View {
 	@State private var columns = 1
 
 	var body: some View {
+		// Filtered and sorted once per update, for the grid and the subtitle alike.
+		let visible = visibleBooks
 		VStack(spacing: 0) {
 			switch scope {
-			case .recents, .comics: comics
+			case .recents, .comics: comics(visible)
 			case .bookmarks: BookmarksView(search: search, selection: $bookmarkSelection, onOpen: onOpen)
 			}
 			if model.job != nil || model.downloads.hasTickets || model.skippedCount > 0 {
@@ -101,7 +102,7 @@ struct LibraryView: View {
 		.searchable(text: $search, placement: .toolbar, prompt: scope == .bookmarks ? "Search Bookmarks" : "Search Comics")
 		.toolbar { toolbar }
 		.navigationTitle("Library")
-		.navigationSubtitle(subtitle)
+		.navigationSubtitle(String(localized: "\(visible.count) comics"))
 		.inspector(isPresented: $showsDetails) {
 			// For a bookmark, the comic it belongs to, opened on its page.
 			Group {
@@ -136,10 +137,6 @@ struct LibraryView: View {
 
 	private var selectedBook: ComicBook? {
 		selection.flatMap { id in books.first { $0.id == id } }
-	}
-
-	private var subtitle: String {
-		String(localized: "\(visibleBooks.count) comics")
 	}
 
 	private var deletionTitle: String {
@@ -185,11 +182,10 @@ struct LibraryView: View {
 	// MARK: Grid
 
 	@ViewBuilder
-	private var comics: some View {
+	private func comics(_ visible: [ComicBook]) -> some View {
 		if books.isEmpty {
 			LibraryEmptyView()
 		} else {
-			let visible = visibleBooks
 			if visible.isEmpty, scope == .recents, search.isEmpty {
 				ContentUnavailableView("No Recent Comics", systemImage: "clock",
 									   description: Text("Comics you open show up here."))
@@ -208,23 +204,14 @@ struct LibraryView: View {
 					LazyVGrid(columns: [GridItem(.adaptive(minimum: columnWidth), spacing: LibraryMetrics.spacing, alignment: .top)],
 							  spacing: LibraryMetrics.spacing) {
 						ForEach(visible) { book in
-							CoverCell(book: book,
-									  width: columnWidth,
-									  isSelected: selection == book.id,
-									  isHovered: hovered == book.id,
-									  download: model.downloads.ticket(for: book.id),
-									  onCancelDownload: { model.downloads.cancel(book.id) })
+							GridCell(book: book,
+									 width: columnWidth,
+									 isSelected: selection == book.id,
+									 download: model.downloads.ticket(for: book.id),
+									 onCancelDownload: { model.downloads.cancel(book.id) },
+									 onSelect: { select(book.id) },
+									 onOpen: { onOpen(book, nil) })
 								.id(book.id)
-								.overlay {
-									if model.downloads.ticket(for: book.id) == nil {
-										CellMouse(onSelect: { select(book.id) },
-												  onOpen: { onOpen(book, nil) },
-												  onHover: { inside in
-													  if inside { hovered = book.id } else if hovered == book.id { hovered = nil }
-												  })
-									}
-								}
-								.onTapGesture { select(book.id) }
 								.contextMenu { menu(for: book) }
 						}
 					}
@@ -379,6 +366,39 @@ struct LibraryView: View {
 
 // MARK: - Cover cell
 
+/// One cover in the grid with its mouse handling. The hover lives here rather than in the
+/// library: the mouse crosses covers all the time while scrolling, and a hover held by the
+/// library re-ran its whole body (filter, sort, grid diff) at every cover passed.
+struct GridCell: View {
+	let book: ComicBook
+	let width: CGFloat
+	let isSelected: Bool
+	let download: DownloadManager.Ticket?
+	let onCancelDownload: () -> Void
+	let onSelect: () -> Void
+	let onOpen: () -> Void
+
+	@State private var isHovered = false
+
+	var body: some View {
+		CoverCell(book: book,
+				  width: width,
+				  isSelected: isSelected,
+				  isHovered: isHovered,
+				  download: download,
+				  onCancelDownload: onCancelDownload)
+			.overlay {
+				if download == nil {
+					CellMouse(onSelect: onSelect,
+							  onOpen: onOpen,
+							  onHover: { isHovered = $0 })
+				}
+			}
+			.onTapGesture(perform: onSelect)
+			.onChange(of: download == nil) { isHovered = false }
+	}
+}
+
 struct CoverCell: View {
 	let book: ComicBook
 	let width: CGFloat
@@ -396,8 +416,11 @@ struct CoverCell: View {
 	var body: some View {
 		VStack(alignment: .leading, spacing: 6) {
 			ZStack(alignment: .bottomLeading) {
+				// The shadow hangs on this plain shape, not on the whole cover: a shadow over a
+				// view with an image renders it offscreen first, for every cover in every frame.
 				RoundedRectangle(cornerRadius: LibraryMetrics.coverRadius, style: .continuous)
 					.fill(.quaternary)
+					.shadow(color: .black.opacity(isHovered ? 0.35 : 0.25), radius: isHovered ? 9 : 4, y: isHovered ? 5 : 2)
 				if book.coverURL == nil {
 					Image(systemName: "exclamationmark.triangle")
 						.font(.system(size: width * 0.18, weight: .thin))
@@ -413,7 +436,6 @@ struct CoverCell: View {
 				RoundedRectangle(cornerRadius: LibraryMetrics.coverRadius, style: .continuous)
 					.strokeBorder(Color.accentColor, lineWidth: isSelected ? 3 : 0)
 			)
-			.shadow(color: .black.opacity(isHovered ? 0.35 : 0.25), radius: isHovered ? 9 : 4, y: isHovered ? 5 : 2)
 			.scaleEffect(isHovered ? 1.02 : 1)
 			.animation(.easeOut(duration: 0.12), value: isHovered)
 

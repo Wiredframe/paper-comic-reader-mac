@@ -17,7 +17,6 @@ struct BookmarksView: View {
 
 	@Environment(AppModel.self) private var model
 	@Query(sort: \Bookmark.dateAdded, order: .reverse) private var bookmarks: [Bookmark]
-	@State private var hovered: UUID?
 	@State private var columns = 1
 	@FocusState private var focused: Bool
 
@@ -28,6 +27,7 @@ struct BookmarksView: View {
 	}
 
 	var body: some View {
+		let visible = self.visible
 		if bookmarks.isEmpty {
 			ContentUnavailableView("No Bookmarks",
 								   systemImage: "bookmark",
@@ -46,8 +46,13 @@ struct BookmarksView: View {
 					LazyVGrid(columns: [GridItem(.adaptive(minimum: Self.cardWidth), spacing: LibraryMetrics.spacing, alignment: .top)],
 							  spacing: LibraryMetrics.spacing) {
 						ForEach(marks) { mark in
-							card(mark)
+							BookmarkCard(mark: mark,
+										 width: Self.cardWidth,
+										 isSelected: selection == mark.id,
+										 onSelect: { select(mark.id) },
+										 onOpen: { if let book = mark.book { onOpen(book, mark.pageIndex) } })
 								.id(mark.id)
+								.contextMenu { menu(for: mark) }
 						}
 					}
 					.padding(LibraryMetrics.spacing)
@@ -74,50 +79,18 @@ struct BookmarksView: View {
 		}
 	}
 
-	private func card(_ mark: Bookmark) -> some View {
-		let isSelected = selection == mark.id
-		let isHovered = hovered == mark.id
-		return VStack(alignment: .leading, spacing: 4) {
-			CoverImage(url: mark.thumbURL, maxPixel: 400)
-				.frame(width: Self.cardWidth, height: Self.cardWidth / CGFloat(mark.pageAspect ?? Double(LibraryMetrics.defaultAspect)))
-				.background(.quaternary)
-				.clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-				.overlay(
-					RoundedRectangle(cornerRadius: 6, style: .continuous)
-						.strokeBorder(Color.accentColor, lineWidth: isSelected ? 3 : 0)
-				)
-				.shadow(color: .black.opacity(isHovered ? 0.35 : 0.25), radius: isHovered ? 9 : 4, y: isHovered ? 5 : 2)
-				.scaleEffect(isHovered ? 1.02 : 1)
-				.animation(.easeOut(duration: 0.12), value: isHovered)
-			Text(mark.book?.displayTitle ?? "")
-				.font(.system(size: 12, weight: .medium))
-				.foregroundStyle(isSelected ? Color.accentColor : Color.primary)
-				.lineLimit(1)
-			Text(mark.storyLabel.map { "\(mark.pageLabel) · \($0)" } ?? mark.pageLabel)
-				.font(.system(size: 11))
-				.foregroundStyle(.secondary)
-				.lineLimit(1)
+	@ViewBuilder
+	private func menu(for mark: Bookmark) -> some View {
+		Button("Open") { if let book = mark.book { onOpen(book, mark.pageIndex) } }
+		if let book = mark.book {
+			Button("Open in New Tab") { model.openInNewTab(book.id) }
 		}
-		.frame(width: Self.cardWidth)
-		.overlay {
-			CellMouse(onSelect: { select(mark.id) },
-					  onOpen: { if let book = mark.book { onOpen(book, mark.pageIndex) } },
-					  onHover: { inside in
-						  if inside { hovered = mark.id } else if hovered == mark.id { hovered = nil }
-					  })
-		}
-		.contextMenu {
-			Button("Open") { if let book = mark.book { onOpen(book, mark.pageIndex) } }
-			if let book = mark.book {
-				Button("Open in New Tab") { model.openInNewTab(book.id) }
-			}
-			Divider()
-			Button("Remove Bookmark", role: .destructive) {
-				if selection == mark.id { selection = nil }
-				try? Storage.fm.removeItem(at: mark.thumbURL)
-				model.context.delete(mark)
-				try? model.context.save()
-			}
+		Divider()
+		Button("Remove Bookmark", role: .destructive) {
+			if selection == mark.id { selection = nil }
+			try? Storage.fm.removeItem(at: mark.thumbURL)
+			model.context.delete(mark)
+			try? model.context.save()
 		}
 	}
 
@@ -140,5 +113,50 @@ struct BookmarksView: View {
 		}
 		selection = marks[min(max(index + offset, 0), marks.count - 1)].id
 		return .handled
+	}
+}
+
+/// One bookmark as the page it marks. Holds its own hover for the same reason as `GridCell`:
+/// a hover kept by the list re-ran the whole list at every card the mouse passed while scrolling.
+private struct BookmarkCard: View {
+	let mark: Bookmark
+	let width: CGFloat
+	let isSelected: Bool
+	let onSelect: () -> Void
+	let onOpen: () -> Void
+
+	@State private var isHovered = false
+
+	var body: some View {
+		VStack(alignment: .leading, spacing: 4) {
+			CoverImage(url: mark.thumbURL, maxPixel: 400)
+				.frame(width: width, height: width / CGFloat(mark.pageAspect ?? Double(LibraryMetrics.defaultAspect)))
+				.clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+				// The shadow hangs on a plain shape behind the page, not on the page itself:
+				// a shadow over an image renders it offscreen first, every card, every frame.
+				.background {
+					RoundedRectangle(cornerRadius: 6, style: .continuous)
+						.fill(.quaternary)
+						.shadow(color: .black.opacity(isHovered ? 0.35 : 0.25), radius: isHovered ? 9 : 4, y: isHovered ? 5 : 2)
+				}
+				.overlay(
+					RoundedRectangle(cornerRadius: 6, style: .continuous)
+						.strokeBorder(Color.accentColor, lineWidth: isSelected ? 3 : 0)
+				)
+				.scaleEffect(isHovered ? 1.02 : 1)
+				.animation(.easeOut(duration: 0.12), value: isHovered)
+			Text(mark.book?.displayTitle ?? "")
+				.font(.system(size: 12, weight: .medium))
+				.foregroundStyle(isSelected ? Color.accentColor : Color.primary)
+				.lineLimit(1)
+			Text(mark.storyLabel.map { "\(mark.pageLabel) · \($0)" } ?? mark.pageLabel)
+				.font(.system(size: 11))
+				.foregroundStyle(.secondary)
+				.lineLimit(1)
+		}
+		.frame(width: width)
+		.overlay {
+			CellMouse(onSelect: onSelect, onOpen: onOpen, onHover: { isHovered = $0 })
+		}
 	}
 }

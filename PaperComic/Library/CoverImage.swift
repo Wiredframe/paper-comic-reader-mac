@@ -20,6 +20,25 @@ struct CoverImage: View {
 	/// What the view currently wants. A decode that finishes after the view moved on is dropped.
 	@State private var wanted: URL?
 
+	init(url: URL?, maxPixel: CGFloat) {
+		self.url = url
+		self.maxPixel = maxPixel
+		// A cover scrolled back into view comes from the cache in the very first frame instead of
+		// showing an empty frame until `onAppear`.
+		if let url, let cached = CoverCache.image(forKey: CoverImage.key(url, maxPixel)) {
+			_image = State(initialValue: cached)
+			_wanted = State(initialValue: url)
+		}
+	}
+
+	private static func key(_ url: URL, _ maxPixel: CGFloat) -> String {
+		"\(url.path)#\(Int(pixelSize(maxPixel)))"
+	}
+
+	private static func pixelSize(_ maxPixel: CGFloat) -> CGFloat {
+		(maxPixel / 128).rounded(.up) * 128
+	}
+
 	var body: some View {
 		Group {
 			if let image {
@@ -46,8 +65,8 @@ struct CoverImage: View {
 			image = nil
 			return
 		}
-		let pixel = (maxPixel / 128).rounded(.up) * 128
-		let key = "\(target.path)#\(Int(pixel))"
+		let pixel = Self.pixelSize(maxPixel)
+		let key = Self.key(target, maxPixel)
 		if let cached = CoverCache.image(forKey: key) {
 			image = cached
 			return
