@@ -136,8 +136,8 @@ private struct BookmarkCard: View {
 				// a shadow over an image renders it offscreen first, every card, every frame.
 				.background {
 					RoundedRectangle(cornerRadius: 6, style: .continuous)
-						.fill(.quaternary)
-						.shadow(color: .black.opacity(isHovered ? 0.35 : 0.25), radius: isHovered ? 9 : 4, y: isHovered ? 5 : 2)
+						.fill(Color(nsColor: .controlBackgroundColor))
+						.shadow(color: .black.opacity(isHovered ? 0.28 : 0.18), radius: isHovered ? 8 : 3, y: isHovered ? 4 : 1.5)
 				}
 				.overlay(
 					RoundedRectangle(cornerRadius: 6, style: .continuous)

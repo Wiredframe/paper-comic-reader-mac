@@ -419,8 +419,8 @@ struct CoverCell: View {
 				// The shadow hangs on this plain shape, not on the whole cover: a shadow over a
 				// view with an image renders it offscreen first, for every cover in every frame.
 				RoundedRectangle(cornerRadius: LibraryMetrics.coverRadius, style: .continuous)
-					.fill(.quaternary)
-					.shadow(color: .black.opacity(isHovered ? 0.35 : 0.25), radius: isHovered ? 9 : 4, y: isHovered ? 5 : 2)
+					.fill(Color(nsColor: .controlBackgroundColor))
+					.shadow(color: .black.opacity(isHovered ? 0.28 : 0.18), radius: isHovered ? 8 : 3, y: isHovered ? 4 : 1.5)
 				if book.coverURL == nil {
 					Image(systemName: "exclamationmark.triangle")
 						.font(.system(size: width * 0.18, weight: .thin))
