@@ -22,8 +22,8 @@
 # workflow writes, not from a local build, since two builds do not produce byte-identical zips.
 
 cask "paper-comic-reader" do
-  version "3.1.3"
-  sha256 "268b6c5d6368820cfab69bb0548d9c08c5eaa1d5a31f9909767efd06753ab081"
+  version "3.1.4"
+  sha256 "fbfa542efede97d89a87ad331c4791fb95134c542cc26813686fe85aecadcb41"
 
   url "https://github.com/Wiredframe/paper-comic-reader-mac/releases/download/v#{version}/Paper-Comic-Reader-#{version}.zip"
   name "Paper Comic Reader"
